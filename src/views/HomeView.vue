@@ -1,9 +1,292 @@
 <script setup lang="ts">
-import TheWelcome from '../components/TheWelcome.vue'
+import { computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElButton, ElIcon, ElTooltip } from 'element-plus'
+import { ArrowRight, Box, RefreshRight, Warning } from '@element-plus/icons-vue'
+import StorefrontHeader from '@/components/storefront/StorefrontHeader.vue'
+import ProductCard from '@/components/storefront/ProductCard.vue'
+import ProductGridSkeleton from '@/components/storefront/ProductGridSkeleton.vue'
+import { useHomeProducts } from '@/composables/useHomeProducts'
+
+const router = useRouter()
+const {
+  category,
+  keyword,
+  products,
+  state,
+  errorKind,
+  selectCategory,
+  search,
+  clearSearch,
+  retry,
+} = useHomeProducts()
+const hasProductList = computed(() => router.hasRoute('products'))
+
+function viewAll() {
+  if (hasProductList.value) void router.push({ name: 'products' })
+}
 </script>
 
 <template>
-  <main>
-    <TheWelcome />
-  </main>
+  <div class="storefront">
+    <a class="skip-link" href="#catalog">跳转到商品区域</a>
+    <StorefrontHeader
+      :category="category"
+      v-model:keyword="keyword"
+      @select-category="selectCategory"
+      @search="search"
+      @clear-search="clearSearch"
+    />
+
+    <main id="catalog" class="catalog" aria-labelledby="catalog-title" tabindex="-1">
+      <div class="catalog-heading">
+        <h1 id="catalog-title">测绘工具与配件</h1>
+        <ElTooltip
+          :content="hasProductList ? '查看全部商品' : '查看全部 · 暂未开放'"
+          :trigger="['hover', 'focus']"
+        >
+          <ElButton
+            text
+            class="view-all"
+            :aria-disabled="!hasProductList"
+            :aria-label="hasProductList ? '查看全部商品' : '查看全部商品，暂未开放'"
+            @click="viewAll"
+          >
+            <span>查看全部</span>
+            <ElIcon aria-hidden="true"><ArrowRight /></ElIcon>
+          </ElButton>
+        </ElTooltip>
+      </div>
+
+      <section class="catalog-content" :aria-busy="state === 'loading'" aria-label="首页商品">
+        <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          <template v-if="state === 'loading'">正在加载仪器</template>
+          <template v-else-if="state === 'success'">已加载 {{ products.length }} 件商品</template>
+          <template v-else-if="state === 'empty'">暂无仪器</template>
+          <template v-else>仪器加载失败，请重试</template>
+        </div>
+
+        <ProductGridSkeleton v-if="state === 'loading'" />
+        <div v-else-if="state === 'success'" class="product-grid">
+          <ProductCard v-for="product in products" :key="product.id" :product="product" />
+        </div>
+        <div v-else-if="state === 'empty'" class="catalog-state">
+          <ElIcon class="state-icon" aria-hidden="true"><Box /></ElIcon>
+          <p class="state-title">暂无仪器</p>
+        </div>
+        <div v-else class="catalog-state">
+          <ElIcon class="state-icon" aria-hidden="true"><Warning /></ElIcon>
+          <p class="state-title">仪器加载失败，请重试</p>
+          <p v-if="errorKind === 'contract'" class="state-description">商品服务尚未就绪</p>
+          <ElButton class="retry-button" :icon="RefreshRight" @click="retry">重试</ElButton>
+        </div>
+      </section>
+    </main>
+
+    <footer class="storefront-footer">经纬智选 · 测绘工具商城</footer>
+  </div>
 </template>
+
+<style scoped>
+.storefront {
+  max-width: 1584px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 64px 64px 24px;
+}
+
+.skip-link {
+  position: fixed;
+  top: -60px;
+  left: 24px;
+  z-index: 100;
+  padding: 12px 20px;
+  border-radius: 8px;
+  background: var(--store-surface);
+}
+
+.skip-link:focus {
+  top: 12px;
+}
+
+.catalog {
+  margin-top: 82px;
+  outline: none;
+}
+
+.catalog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+  padding: 0 12px;
+}
+
+.catalog-heading h1 {
+  margin: 0;
+  color: var(--store-text);
+  font-size: clamp(28px, 2.42vw, 36px);
+  font-weight: 650;
+  line-height: 1.45;
+  letter-spacing: -0.035em;
+}
+
+.view-all.el-button {
+  display: inline-flex;
+  gap: 8px;
+  height: 40px;
+  padding: 0;
+  color: var(--store-text);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.view-all.el-button:not(.is-disabled):hover {
+  background: transparent;
+  color: #536b7a;
+}
+
+.view-all[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+.catalog-content {
+  min-height: 598px;
+}
+
+.catalog :deep(.product-grid) {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 12px;
+  min-height: 598px;
+}
+
+.catalog-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 598px;
+  padding: 40px 20px;
+  border: 1px solid var(--store-border);
+  border-radius: 12px;
+  background: var(--store-surface);
+  text-align: center;
+}
+
+.state-icon {
+  margin-bottom: 22px;
+  color: #87949d;
+  font-size: 44px;
+}
+
+.state-title {
+  margin: 0;
+  color: var(--store-text);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+.state-description {
+  margin: 10px 0 0;
+  color: var(--store-muted);
+  font-size: 15px;
+}
+
+.retry-button.el-button {
+  height: 40px;
+  margin-top: 24px;
+  padding: 0 24px;
+  border-color: var(--store-border);
+  border-radius: 20px;
+  color: var(--store-text);
+  background: var(--store-surface);
+}
+
+.retry-button.el-button:hover {
+  background: var(--store-selected);
+  border-color: #cbd5dc;
+}
+
+.storefront-footer {
+  margin-top: 56px;
+  padding: 30px 0 12px;
+  border-top: 1px solid var(--store-border);
+  color: var(--store-text);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+@media (max-width: 1199px) {
+  .storefront {
+    padding: 40px 40px 24px;
+  }
+
+  .catalog {
+    margin-top: 60px;
+  }
+
+  .catalog :deep(.product-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    min-height: 578px;
+  }
+
+  .catalog-content,
+  .catalog-state {
+    min-height: 578px;
+  }
+}
+
+@media (max-width: 599px) {
+  .storefront {
+    padding: 20px 20px 20px;
+  }
+
+  .catalog {
+    margin-top: 42px;
+  }
+
+  .catalog-heading {
+    gap: 12px;
+    margin-bottom: 18px;
+    padding: 0 2px;
+  }
+
+  .catalog-heading h1 {
+    font-size: 24px;
+    letter-spacing: -0.02em;
+  }
+
+  .view-all.el-button {
+    gap: 3px;
+    height: 36px;
+    font-size: 14px;
+  }
+
+  .catalog :deep(.product-grid) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    min-height: 558px;
+  }
+
+  .catalog-content,
+  .catalog-state {
+    min-height: 430px;
+  }
+
+  .state-title {
+    font-size: 18px;
+  }
+
+  .storefront-footer {
+    margin-top: 32px;
+    padding: 24px 2px 8px;
+    font-size: 15px;
+  }
+}
+</style>
