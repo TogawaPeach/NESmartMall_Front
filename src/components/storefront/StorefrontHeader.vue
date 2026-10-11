@@ -2,31 +2,19 @@
 import { ElButton, ElIcon, ElInput, ElTooltip } from 'element-plus'
 import { Search, ShoppingCart, Tickets, User } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import type { ProductCategoryKey } from '@/types/product'
-import jingweiLogo from '@/assets/jingwei-logo.png'
+import jingweiLogo from '@/assets/jingwei-logo.svg'
 
 defineProps<{
-  category: ProductCategoryKey
   keyword: string
 }>()
 
 const emit = defineEmits<{
-  'select-category': [category: ProductCategoryKey]
   'update:keyword': [value: string]
   search: []
   'clear-search': []
 }>()
 
 const router = useRouter()
-
-const categories: { key: ProductCategoryKey; label: string }[] = [
-  { key: 'all', label: '全部' },
-  { key: 'total-station', label: '全站仪' },
-  { key: 'gnss-rtk', label: 'GNSS / RTK' },
-  { key: 'level', label: '水准仪' },
-  { key: 'distance-meter', label: '测距仪' },
-  { key: 'accessory', label: '配件' },
-]
 
 const utilityItems = [
   { route: 'orders', label: '我的订单', icon: Tickets },
@@ -57,21 +45,6 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
       <RouterLink class="storefront-brand" :to="{ name: 'home' }" aria-label="经纬智选首页">
         <img class="brand-logo" :src="jingweiLogo" alt="经纬智选" width="64" height="56" />
       </RouterLink>
-
-      <div class="category-navigation" role="group" aria-label="商品分类">
-        <div class="category-box">
-          <ElButton
-            v-for="item in categories"
-            :key="item.key"
-            class="category-button"
-            :class="{ 'is-selected': category === item.key }"
-            :aria-pressed="category === item.key"
-            @click="emit('select-category', item.key)"
-          >
-            {{ item.label }}
-          </ElButton>
-        </div>
-      </div>
 
       <ElInput
         id="storefront-product-search"
@@ -128,12 +101,12 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   display: flex;
   align-items: center;
   gap: 20px;
-  min-height: 90px;
-  padding: 18px 36px;
+  min-height: 72px;
+  padding: 9px 18px;
   border: 1px solid #e3e6e8;
   border-radius: 999px;
   background: #fff;
-  box-shadow: 0 8px 24px rgb(35 40 45 / 4%);
+  box-shadow: 0 4px 12px rgb(35 40 45 / 4%);
 }
 
 .storefront-brand {
@@ -151,53 +124,6 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   width: 64px;
   height: 54px;
   object-fit: contain;
-}
-
-.category-navigation {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: flex-start;
-  min-width: 0;
-}
-
-.category-box {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: max-content;
-  margin-inline: auto;
-  gap: 6px;
-  padding: 4px;
-  border: 1px solid #e3e6e8;
-  border-radius: 28px;
-  background: #fafbfb;
-}
-
-.category-button {
-  --el-button-text-color: #23282d;
-  --el-button-bg-color: transparent;
-  --el-button-border-color: transparent;
-  --el-button-hover-text-color: #23282d;
-  --el-button-hover-bg-color: #f4f6f7;
-  --el-button-hover-border-color: transparent;
-  --el-button-active-text-color: #23282d;
-  --el-button-active-bg-color: #edf2f5;
-  --el-button-active-border-color: transparent;
-  flex-shrink: 0;
-  height: 40px;
-  margin: 0;
-  padding: 0 14px;
-  border-radius: 24px;
-  font-size: 17px;
-  font-weight: 500;
-}
-
-.category-button.is-selected {
-  --el-button-bg-color: #edf2f5;
-  --el-button-hover-bg-color: #edf2f5;
-  font-weight: 600;
 }
 
 .product-search {
@@ -269,61 +195,24 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
 }
 
 .storefront-brand:focus-visible,
-.category-button:focus-visible,
 .utility-button:focus-visible,
 .search-submit:focus-visible {
   outline: 2px solid #899ca9;
   outline-offset: 3px;
 }
 
-@media (max-width: 1279px) {
-  .storefront-navigation {
-    flex-wrap: wrap;
-    gap: 14px;
-    padding: 18px 28px;
-    border-radius: 32px;
-  }
-
-  .category-navigation {
-    flex: 1 1 calc(100% - 140px);
-  }
-
-  .product-search {
-    margin-left: auto;
-  }
-}
-
-@media (max-width: 1023px) {
+@media (max-width: 599px) {
   .storefront-navigation {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 16px 12px;
-    padding: 20px;
+    padding: 10px;
     border-radius: 26px;
   }
 
   .storefront-brand {
     grid-column: 1 / -1;
     justify-self: start;
-  }
-
-  .category-navigation {
-    grid-column: 1 / -1;
-    overflow-x: auto;
-    padding: 3px;
-    margin: -3px;
-    scrollbar-width: thin;
-    scrollbar-color: #dce2e6 transparent;
-  }
-
-  .category-box {
-    gap: 4px;
-  }
-
-  .category-button {
-    height: 40px;
-    padding: 0 12px;
-    font-size: 14px;
   }
 
   .product-search {

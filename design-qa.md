@@ -84,3 +84,19 @@ final result: passed
 按用户要求适度增加全页左右边距：桌面 50→64px，平板 32→40px，手机 16→20px。导航、商品区域与页脚共用首页外层 padding，因此同步对齐。
 
 Chrome 检查 1488px、768px、320px 宽度下的实际左右 padding 分别为 64px、40px、20px，页面 scrollWidth 均等于 viewport 宽度。截图 `storefront-wider-margins-desktop.jpg` 与 `storefront-wider-margins-preview.jpg` 位于上述证据目录，分别保留整页和导航/标题区域证据。视觉检查无新增遮挡或挤压。`npm run build`（包含类型检查）和 `git diff --check` 通过，最终结果仍为 passed。
+
+## 后续矢量 Logo 与导航外围留白调整
+
+按用户要求，以三个 SVG 路径重绘品牌标识的菱形、斜线与山形几何轮廓，使用透明背景及石墨色填充。新增 `src/assets/jingwei-logo.svg`，替换并删除原 PNG 裁切资源；Logo 显示尺寸和可访问名称保留。
+
+将“外围缩小到一半”落实为导航容器内边距减半：桌面 18px 36px → 9px 18px，中间断点 18px 28px → 9px 14px，平板及手机 20px → 10px。桌面最小高度同步降至 72px，实际含边框高度由 92px 降至 74px；阴影范围也减半。内部文字、分类按钮、搜索框及入口图标尺寸保留。
+
+Chrome 实测 1470px、768px、320px 下页面无横向溢出，SVG 加载正常，桌面导航 padding 为 9px 18px，平板和手机为 10px。手机分类仍可横向滚动，搜索与入口按钮均保持可见。截图 `vector-logo-compact-navigation.png` 位于上述证据目录，保留导航及标题区域。`npm run build`（包含类型检查）、导航组件 ESLint 与 `git diff --check` 通过。
+
+## 后续分类栏位置与调试入口调整
+
+按用户标注，将商品分类从顶部导航移至原“测绘工具与配件”标题处。分类抽成 `ProductCategoryFilter.vue`，首页直接绑定原有 `category` 和 `selectCategory`；顶部仅保留 Logo、搜索及个人入口。标题保留屏幕阅读器可读的“商品分类”，手机分类栏横向滚动，“查看全部”排列在下一行右侧。
+
+移除 `vite.config.ts` 中 Vue DevTools 插件的导入和注册，页面底部不再注入调试面板入口。保留已有依赖，避免无关的依赖变更。
+
+Chrome 检查确认分类仅在 main 商品区中出现，顶部无分类，页面 DOM 中无 DevTools 按钮。桌面、768px 平板及 320px 手机无页面横向溢出；切换 GNSS / RTK 与配件保留已输入搜索词，手机能滚动至最后的配件并选中。检查结束后恢复空搜索词、全部分类及默认浏览器尺寸。截图 `product-category-relocated.png` 位于上述证据目录。`npm run build`（包含类型检查）、所修改 Vue 组件及 Vite 配置的 ESLint、`git diff --check` 通过。

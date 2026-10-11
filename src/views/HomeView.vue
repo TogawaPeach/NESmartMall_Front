@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElButton, ElIcon, ElTooltip } from 'element-plus'
 import { ArrowRight, Box, RefreshRight, Warning } from '@element-plus/icons-vue'
 import StorefrontHeader from '@/components/storefront/StorefrontHeader.vue'
+import ProductCategoryFilter from '@/components/storefront/ProductCategoryFilter.vue'
 import ProductCard from '@/components/storefront/ProductCard.vue'
 import ProductGridSkeleton from '@/components/storefront/ProductGridSkeleton.vue'
 import { useHomeProducts } from '@/composables/useHomeProducts'
@@ -31,16 +32,15 @@ function viewAll() {
   <div class="storefront">
     <a class="skip-link" href="#catalog">跳转到商品区域</a>
     <StorefrontHeader
-      :category="category"
       v-model:keyword="keyword"
-      @select-category="selectCategory"
       @search="search"
       @clear-search="clearSearch"
     />
 
     <main id="catalog" class="catalog" aria-labelledby="catalog-title" tabindex="-1">
       <div class="catalog-heading">
-        <h1 id="catalog-title">测绘工具与配件</h1>
+        <h1 id="catalog-title" class="sr-only">商品分类</h1>
+        <ProductCategoryFilter :category="category" @select-category="selectCategory" />
         <ElTooltip
           :content="hasProductList ? '查看全部商品' : '查看全部 · 暂未开放'"
           :trigger="['hover', 'focus']"
@@ -123,17 +123,9 @@ function viewAll() {
   padding: 0 12px;
 }
 
-.catalog-heading h1 {
-  margin: 0;
-  color: var(--store-text);
-  font-size: clamp(28px, 2.42vw, 36px);
-  font-weight: 650;
-  line-height: 1.45;
-  letter-spacing: -0.035em;
-}
-
 .view-all.el-button {
   display: inline-flex;
+  flex-shrink: 0;
   gap: 8px;
   height: 40px;
   padding: 0;
@@ -252,17 +244,18 @@ function viewAll() {
   }
 
   .catalog-heading {
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 18px;
     padding: 0 2px;
   }
 
-  .catalog-heading h1 {
-    font-size: 24px;
-    letter-spacing: -0.02em;
+  .catalog-heading :deep(.category-filter) {
+    flex-basis: 100%;
   }
 
   .view-all.el-button {
+    margin-left: auto;
     gap: 3px;
     height: 36px;
     font-size: 14px;

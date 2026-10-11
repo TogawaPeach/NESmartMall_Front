@@ -11,7 +11,7 @@
 | 首页与组件 | 更新 `src/views/HomeView.vue`；新增 `src/components/storefront/StorefrontHeader.vue`、`ProductCard.vue`、`ProductGridSkeleton.vue` |
 | 接口与类型 | 新增 `src/api/http.ts`、`src/api/productContract.ts`、`src/api/products.ts`、`src/types/product.ts`、`src/composables/useHomeProducts.ts` |
 | 环境配置 | 新增 `.env.example`；更新 `env.d.ts` |
-| 应用与样式 | 更新 `src/App.vue`、`src/main.ts`、`src/assets/base.css`、`src/assets/main.css`、`index.html`；新增参考图提取的 `src/assets/jingwei-logo.png` |
+| 应用与样式 | 更新 `src/App.vue`、`src/main.ts`、`src/assets/base.css`、`src/assets/main.css`、`index.html`；新增根据参考图几何轮廓绘制的 `src/assets/jingwei-logo.svg` |
 | 依赖 | 更新 `package.json`、`package-lock.json`，声明 `@element-plus/icons-vue` 直接依赖 |
 | 文档 | 更新 `README.md`；新增本文与 `design-qa.md` |
 
