@@ -4,17 +4,16 @@ import { ElSkeleton, ElSkeletonItem } from 'element-plus'
 
 <template>
   <div class="product-grid" aria-hidden="true">
-    <ElSkeleton v-for="index in 4" :key="index" class="skeleton-card" animated>
+    <ElSkeleton v-for="index in 10" :key="index" class="skeleton-card" animated>
       <template #template>
         <ElSkeletonItem variant="image" class="skeleton-image" />
         <div class="skeleton-details">
           <ElSkeletonItem variant="h3" class="skeleton-name" />
-          <ElSkeletonItem variant="text" class="skeleton-category" />
-          <div class="skeleton-parameters">
-            <ElSkeletonItem variant="text" />
-            <ElSkeletonItem variant="text" />
+          <ElSkeletonItem variant="text" class="skeleton-name-line" />
+          <div class="skeleton-summary">
+            <ElSkeletonItem variant="h3" class="skeleton-price" />
+            <ElSkeletonItem variant="text" class="skeleton-sales" />
           </div>
-          <ElSkeletonItem variant="h3" class="skeleton-price" />
         </div>
       </template>
     </ElSkeleton>
@@ -24,8 +23,7 @@ import { ElSkeleton, ElSkeletonItem } from 'element-plus'
 <style scoped>
 .skeleton-card {
   overflow: hidden;
-  min-height: 598px;
-  padding: 24px;
+  padding: 12px;
   border: 1px solid var(--store-border);
   border-radius: 12px;
   background: var(--store-surface);
@@ -33,61 +31,40 @@ import { ElSkeleton, ElSkeletonItem } from 'element-plus'
 
 .skeleton-image {
   width: 100%;
-  height: 304px;
+  height: auto;
+  aspect-ratio: 1;
 }
 
 .skeleton-details {
-  padding-top: 28px;
+  padding: 14px 4px 6px;
 }
 
 .skeleton-name {
   width: 85%;
-  height: 28px;
+  height: 24px;
 }
 
-.skeleton-category {
-  width: 38%;
+.skeleton-name-line {
+  width: 65%;
   height: 18px;
-  margin-top: 14px;
+  margin-top: 8px;
 }
 
-.skeleton-parameters {
+.skeleton-summary {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  margin: 20px 0;
-  padding: 16px 0;
-  border-top: 1px solid var(--store-border);
-  border-bottom: 1px solid var(--store-border);
+  margin-top: 16px;
 }
 
-.skeleton-parameters .el-skeleton__item {
-  width: 68%;
+.skeleton-sales {
+  width: 30%;
   height: 18px;
 }
 
 .skeleton-price {
   width: 48%;
   height: 32px;
-}
-
-@media (max-width: 1199px) {
-  .skeleton-card {
-    min-height: 578px;
-  }
-
-  .skeleton-image {
-    height: 284px;
-  }
-}
-
-@media (max-width: 599px) {
-  .skeleton-card {
-    min-height: 558px;
-  }
-
-  .skeleton-image {
-    height: 264px;
-  }
 }
 </style>

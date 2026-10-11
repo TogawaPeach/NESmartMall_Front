@@ -10,6 +10,7 @@ export interface ProductContract {
   confirmed: boolean
   endpoint: string
   query: {
+    sort: { parameter: string; value: string }
     categoryParameter: string | null
     keywordParameter: string | null
     /** Confirm whether an empty keyword is omitted or explicitly sent. */
@@ -35,6 +36,7 @@ export interface ProductContract {
     categoryName: FieldPath | null
     parameters: FieldPath | null
     price: FieldPath | null
+    sales: FieldPath | null
   }
   parameters: {
     format: 'objects' | 'strings' | null
@@ -47,19 +49,19 @@ export interface ProductContract {
 }
 
 /**
- * Integration is intentionally pending. Null does not invent a field or ID.
- * Once confirmed is true, null optional field paths mean the field is absent
- * from the agreed response. See docs/product-api-contract.md before editing.
+ * The all-products query is confirmed. Category and keyword filters remain
+ * unconfigured until the backend supports them. See docs/product-api-contract.md.
  */
 export const productContract: ProductContract = {
-  confirmed: false,
-  endpoint: import.meta.env.VITE_PRODUCTS_ENDPOINT?.trim() || '',
+  confirmed: true,
+  endpoint: import.meta.env.VITE_PRODUCTS_ENDPOINT?.trim() || '/api/products',
   query: {
+    sort: { parameter: 'sort', value: 'sales_desc' },
     categoryParameter: null,
     keywordParameter: null,
-    sendEmptyKeyword: null,
-    limit: { enabled: null, parameter: null },
-    allCategory: { mode: null, value: null },
+    sendEmptyKeyword: false,
+    limit: { enabled: true, parameter: 'limit' },
+    allCategory: { mode: 'omit', value: null },
   },
   categoryValues: {
     'total-station': null,
@@ -69,20 +71,21 @@ export const productContract: ProductContract = {
     accessory: null,
   },
   response: {
-    listPath: null,
-    businessStatus: { mode: null, path: null, successValues: null },
+    listPath: ['data'],
+    businessStatus: { mode: 'field', path: ['code'], successValues: [200] },
   },
   fields: {
-    id: null,
-    name: null,
+    id: ['id'],
+    name: ['name'],
     model: null,
-    imageUrl: null,
+    imageUrl: ['coverUrl'],
     categoryName: null,
     parameters: null,
-    price: null,
+    price: ['price'],
+    sales: ['sales'],
   },
   parameters: { format: null, label: null, value: null, unit: null },
-  priceUnit: null,
+  priceUnit: 'fen',
 }
 
 export class ProductContractError extends Error {
@@ -106,14 +109,15 @@ export function validateProductContract(): void {
   const missing =
     !contract.confirmed ||
     !contract.endpoint ||
-    !query.categoryParameter?.trim() ||
-    !query.keywordParameter?.trim() ||
+    !query.sort.parameter.trim() ||
+    !query.sort.value.trim() ||
     query.sendEmptyKeyword === null ||
     query.limit.enabled === null ||
     (query.limit.enabled && !query.limit.parameter?.trim()) ||
     query.allCategory.mode === null ||
-    (query.allCategory.mode === 'value' && query.allCategory.value === null) ||
-    Object.values(contract.categoryValues).some((value) => value === null) ||
+    (query.allCategory.mode === 'value' &&
+      (!query.categoryParameter?.trim() || query.allCategory.value === null)) ||
+    (query.sendEmptyKeyword && !query.keywordParameter?.trim()) ||
     contract.response.listPath === null ||
     status.mode === null ||
     (status.mode === 'field' && (!status.path || !status.successValues?.length)) ||

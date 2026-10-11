@@ -15,13 +15,14 @@ export function useHomeProducts() {
   const products = ref<Product[]>([])
   const state = ref<ProductLoadState>('loading')
   const errorKind = ref<ProductErrorKind>(null)
+  const errorMessage = ref('')
   let controller: AbortController | undefined
   let sequence = 0
   let mounted = false
   let lastQueryKey: string | undefined
 
   async function load(force = false): Promise<void> {
-    const query = { category: category.value, keyword: keyword.value.trim(), limit: 4 }
+    const query = { category: category.value, keyword: keyword.value.trim(), limit: 10 }
     const queryKey = JSON.stringify(query)
     // Clearing via the clear icon and the keyword watcher can occur together.
     if (!force && queryKey === lastQueryKey) return
@@ -32,12 +33,13 @@ export function useHomeProducts() {
     controller = requestController
     state.value = 'loading'
     errorKind.value = null
+    errorMessage.value = ''
     products.value = []
 
     try {
       const result = await queryProducts(query, { signal: requestController.signal })
       if (requestSequence !== sequence || requestController.signal.aborted) return
-      products.value = result.slice(0, 4)
+      products.value = result
       state.value = products.value.length ? 'success' : 'empty'
     } catch (error: unknown) {
       if (
@@ -53,6 +55,7 @@ export function useHomeProducts() {
           : error instanceof ProductResponseError
             ? 'response'
             : 'request'
+      errorMessage.value = error instanceof ProductContractError ? error.message : ''
       state.value = 'error'
     }
   }
@@ -96,6 +99,7 @@ export function useHomeProducts() {
     products,
     state,
     errorKind,
+    errorMessage,
     selectCategory,
     search,
     clearSearch,

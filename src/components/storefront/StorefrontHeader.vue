@@ -130,7 +130,7 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
 
 <style scoped>
 .storefront-header {
-  width: 100%;
+  margin-inline: var(--store-module-inset, 0px);
 }
 
 .storefront-navigation {

@@ -17,6 +17,8 @@ export interface Product {
   parameters: CoreParameter[]
   /** Normalized RMB yuan; null means the backend did not provide a price. */
   priceYuan: number | null
+  /** Backend sales count; null means no count was provided. */
+  sales: number | null
 }
 
 export interface ProductQuery {

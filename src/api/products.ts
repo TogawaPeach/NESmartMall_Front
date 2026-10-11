@@ -2,6 +2,7 @@ import type { CoreParameter, Product, ProductQuery } from '@/types/product'
 import { http } from './http'
 import {
   productContract,
+  ProductContractError,
   ProductResponseError,
   validateProductContract,
   type FieldPath,
@@ -76,6 +77,14 @@ function mapProduct(source: unknown): Product {
   const name = readText(readPath(source, fields.name), '商品名称')
   const model = readText(readPath(source, fields.model), '商品型号')
   if (!name && !model) throw new ProductResponseError('商品缺少名称或型号')
+  const sales = readPath(source, fields.sales)
+  if (
+    sales !== undefined &&
+    sales !== null &&
+    (typeof sales !== 'number' || !Number.isSafeInteger(sales) || sales < 0)
+  ) {
+    throw new ProductResponseError('商品购买人数异常')
+  }
 
   return {
     id: id as string | number,
@@ -85,12 +94,19 @@ function mapProduct(source: unknown): Product {
     categoryName: readText(readPath(source, fields.categoryName), '商品分类'),
     parameters: readParameters(source),
     priceYuan: readPrice(source),
+    sales: sales === undefined || sales === null ? null : (sales as number),
   }
 }
 
 function buildParams(query: ProductQuery): Record<string, string | number> {
   const config = productContract.query
-  const params: Record<string, string | number> = {}
+  const params: Record<string, string | number> = { [config.sort.parameter]: config.sort.value }
+  if (
+    query.category !== 'all' &&
+    (!config.categoryParameter || productContract.categoryValues[query.category] === null)
+  ) {
+    throw new ProductContractError('分类查询暂未开放，请选择“全部”')
+  }
   const category =
     query.category === 'all'
       ? config.allCategory.mode === 'value'
@@ -99,6 +115,9 @@ function buildParams(query: ProductQuery): Record<string, string | number> {
       : productContract.categoryValues[query.category]
   if (category !== null) params[config.categoryParameter!] = category
   const keyword = query.keyword.trim()
+  if (keyword && !config.keywordParameter) {
+    throw new ProductContractError('关键词搜索暂未开放，请清空搜索词')
+  }
   if (keyword || config.sendEmptyKeyword) params[config.keywordParameter!] = keyword
   if (config.limit.enabled) params[config.limit.parameter!] = query.limit
   return params
@@ -108,7 +127,7 @@ export async function queryProducts(
   query: ProductQuery,
   options: { signal?: AbortSignal } = {},
 ): Promise<Product[]> {
-  // Fail before Axios is invoked: the pending contract must not make guessed requests.
+  // Only send confirmed query parameters to the backend.
   validateProductContract()
   const response = await http.get<unknown>(productContract.endpoint, {
     params: buildParams(query),

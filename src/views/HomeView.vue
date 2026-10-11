@@ -16,6 +16,7 @@ const {
   products,
   state,
   errorKind,
+  errorMessage,
   selectCategory,
   search,
   clearSearch,
@@ -31,11 +32,7 @@ function viewAll() {
 <template>
   <div class="storefront">
     <a class="skip-link" href="#catalog">跳转到商品区域</a>
-    <StorefrontHeader
-      v-model:keyword="keyword"
-      @search="search"
-      @clear-search="clearSearch"
-    />
+    <StorefrontHeader v-model:keyword="keyword" @search="search" @clear-search="clearSearch" />
 
     <main id="catalog" class="catalog" aria-labelledby="catalog-title" tabindex="-1">
       <div class="catalog-heading">
@@ -77,7 +74,7 @@ function viewAll() {
         <div v-else class="catalog-state">
           <ElIcon class="state-icon" aria-hidden="true"><Warning /></ElIcon>
           <p class="state-title">仪器加载失败，请重试</p>
-          <p v-if="errorKind === 'contract'" class="state-description">商品服务尚未就绪</p>
+          <p v-if="errorKind === 'contract'" class="state-description">{{ errorMessage }}</p>
           <ElButton class="retry-button" :icon="RefreshRight" @click="retry">重试</ElButton>
         </div>
       </section>
@@ -89,6 +86,7 @@ function viewAll() {
 
 <style scoped>
 .storefront {
+  --store-module-inset: 12px;
   max-width: 1584px;
   min-height: 100vh;
   margin: 0 auto;
@@ -120,7 +118,7 @@ function viewAll() {
   justify-content: space-between;
   gap: 20px;
   margin-bottom: 20px;
-  padding: 0 12px;
+  padding: 0 var(--store-module-inset);
 }
 
 .view-all.el-button {
@@ -144,27 +142,31 @@ function viewAll() {
 }
 
 .catalog-content {
+  display: flex;
+  flex-direction: column;
+  margin-inline: var(--store-module-inset);
   min-height: 598px;
+  padding: 16px;
+  border: 1px solid var(--store-border);
+  border-radius: 12px;
+  background: var(--store-surface);
 }
 
 .catalog :deep(.product-grid) {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  align-items: stretch;
+  align-items: start;
+  align-content: start;
   gap: 12px;
-  min-height: 598px;
 }
 
 .catalog-state {
   display: flex;
   flex-direction: column;
+  flex: 1;
   align-items: center;
   justify-content: center;
-  min-height: 598px;
   padding: 40px 20px;
-  border: 1px solid var(--store-border);
-  border-radius: 12px;
-  background: var(--store-surface);
   text-align: center;
 }
 
@@ -205,6 +207,7 @@ function viewAll() {
 
 .storefront-footer {
   margin-top: 56px;
+  margin-inline: var(--store-module-inset);
   padding: 30px 0 12px;
   border-top: 1px solid var(--store-border);
   color: var(--store-text);
@@ -225,17 +228,16 @@ function viewAll() {
   .catalog :deep(.product-grid) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 20px;
-    min-height: 578px;
   }
 
-  .catalog-content,
-  .catalog-state {
+  .catalog-content {
     min-height: 578px;
   }
 }
 
 @media (max-width: 599px) {
   .storefront {
+    --store-module-inset: 2px;
     padding: 10px 20px 20px;
   }
 
@@ -247,7 +249,6 @@ function viewAll() {
     flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 18px;
-    padding: 0 2px;
   }
 
   .catalog-heading :deep(.category-filter) {
@@ -264,12 +265,11 @@ function viewAll() {
   .catalog :deep(.product-grid) {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
-    min-height: 558px;
   }
 
-  .catalog-content,
-  .catalog-state {
+  .catalog-content {
     min-height: 430px;
+    padding: 12px;
   }
 
   .state-title {

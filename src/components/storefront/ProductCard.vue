@@ -7,7 +7,6 @@ import type { Product } from '@/types/product'
 const props = defineProps<{ product: Product }>()
 
 const title = computed(() => props.product.name || props.product.model)
-const parameters = computed(() => props.product.parameters.slice(0, 2))
 const price = computed(() => {
   const value = props.product.priceYuan
   if (value === null || !Number.isFinite(value) || value < 0) return null
@@ -17,6 +16,9 @@ const price = computed(() => {
     maximumFractionDigits: 2,
   }).format(value)
 })
+const sales = computed(() =>
+  props.product.sales === null ? null : new Intl.NumberFormat('zh-CN').format(props.product.sales),
+)
 </script>
 
 <template>
@@ -52,22 +54,14 @@ const price = computed(() => {
 
       <div class="product-details">
         <h2 class="product-name">{{ title }}</h2>
-        <p v-if="product.categoryName" class="product-category">{{ product.categoryName }}</p>
-        <div v-else class="product-category-space" aria-hidden="true" />
-
-        <ul class="product-parameters" aria-label="核心参数">
-          <li v-for="(parameter, index) in parameters" :key="index">
-            <span v-if="parameter.label">{{ parameter.label }} </span>
-            <span>{{ parameter.value }}</span>
-            <span v-if="parameter.unit"> {{ parameter.unit }}</span>
-          </li>
-        </ul>
-
-        <p v-if="price !== null" class="product-price" :aria-label="`人民币 ${price} 元`">
-          <span class="currency" aria-hidden="true">¥</span>
-          <span aria-hidden="true">{{ price }}</span>
-        </p>
-        <p v-else class="price-pending">价格待确认</p>
+        <div class="product-summary">
+          <p v-if="price !== null" class="product-price" :aria-label="`人民币 ${price} 元`">
+            <span class="currency" aria-hidden="true">¥</span>
+            <span aria-hidden="true">{{ price }}</span>
+          </p>
+          <p v-else class="price-pending">价格待确认</p>
+          <p class="product-sales">{{ sales === null ? '购买人数暂无' : `${sales}人购买` }}</p>
+        </div>
       </div>
     </ElCard>
   </article>
@@ -76,7 +70,6 @@ const price = computed(() => {
 <style scoped>
 .product,
 .product-card {
-  height: 100%;
   min-width: 0;
 }
 
@@ -87,20 +80,21 @@ const price = computed(() => {
 }
 
 .product-card :deep(.el-card__body) {
-  height: 100%;
   display: flex;
   flex-direction: column;
 }
 
 .product-image-area {
-  height: 340px;
-  padding: 24px 22px 12px;
+  aspect-ratio: 1;
+  padding: 12px 12px 0;
   flex-shrink: 0;
 }
 
 .product-image {
   width: 100%;
   height: 100%;
+  border-radius: 10px;
+  background: #f7f8f8;
 }
 
 .image-placeholder {
@@ -125,84 +119,71 @@ const price = computed(() => {
   display: flex;
   flex-direction: column;
   flex: 1;
-  padding: 16px 24px 22px;
+  padding: 14px 16px 18px;
 }
 
 .product-name {
   margin: 0;
   color: var(--store-text);
-  font-size: clamp(19px, 1.62vw, 24px);
+  font-size: 18px;
   font-weight: 600;
   line-height: 1.45;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 2.9em;
 }
 
-.product-category,
-.product-category-space {
-  min-height: 26px;
-  margin: 8px 0 12px;
-  font-size: 17px;
-  line-height: 26px;
-  color: var(--store-muted);
-}
-
-.product-parameters {
-  min-height: 90px;
-  margin: auto 0 0;
-  padding: 14px 0;
-  border-top: 1px solid var(--store-border);
-  list-style: none;
-  color: var(--store-muted);
-  font-size: 17px;
-  line-height: 1.8;
-  overflow-wrap: anywhere;
+.product-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 16px;
 }
 
 .product-price,
 .price-pending {
   display: flex;
   align-items: baseline;
-  gap: 7px;
-  min-height: 52px;
+  gap: 2px;
   margin: 0;
-  padding-top: 14px;
-  border-top: 1px solid var(--store-border);
-  color: var(--store-text);
-  font-size: 32px;
+  color: #ff5000;
+  font-size: 28px;
   font-weight: 650;
   line-height: 1.25;
   font-variant-numeric: tabular-nums;
 }
 
 .currency {
-  font-size: 23px;
+  font-size: 19px;
   font-weight: 600;
 }
 
 .price-pending {
   align-items: center;
   color: var(--store-muted);
-  font-size: 19px;
+  font-size: 16px;
   font-weight: 500;
 }
 
-@media (max-width: 1199px) {
-  .product-image-area {
-    height: 320px;
-  }
+.product-sales {
+  margin: 0 0 0 auto;
+  color: var(--store-muted);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 @media (max-width: 599px) {
-  .product-image-area {
-    height: 300px;
-  }
-
   .product-name {
-    font-size: 22px;
+    font-size: 18px;
   }
 
   .product-details {
-    padding: 16px 22px 22px;
+    padding: 14px 16px 18px;
   }
 }
 </style>
