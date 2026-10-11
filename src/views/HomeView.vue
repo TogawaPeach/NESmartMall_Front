@@ -92,7 +92,7 @@ function viewAll() {
   max-width: 1584px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 64px 64px 24px;
+  padding: 32px 64px 24px;
 }
 
 .skip-link {
@@ -110,7 +110,7 @@ function viewAll() {
 }
 
 .catalog {
-  margin-top: 82px;
+  margin-top: 41px;
   outline: none;
 }
 
@@ -215,11 +215,11 @@ function viewAll() {
 
 @media (max-width: 1199px) {
   .storefront {
-    padding: 40px 40px 24px;
+    padding: 20px 40px 24px;
   }
 
   .catalog {
-    margin-top: 60px;
+    margin-top: 30px;
   }
 
   .catalog :deep(.product-grid) {
@@ -236,11 +236,11 @@ function viewAll() {
 
 @media (max-width: 599px) {
   .storefront {
-    padding: 20px 20px 20px;
+    padding: 10px 20px 20px;
   }
 
   .catalog {
-    margin-top: 42px;
+    margin-top: 21px;
   }
 
   .catalog-heading {

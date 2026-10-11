@@ -100,3 +100,21 @@ Chrome 实测 1470px、768px、320px 下页面无横向溢出，SVG 加载正常
 移除 `vite.config.ts` 中 Vue DevTools 插件的导入和注册，页面底部不再注入调试面板入口。保留已有依赖，避免无关的依赖变更。
 
 Chrome 检查确认分类仅在 main 商品区中出现，顶部无分类，页面 DOM 中无 DevTools 按钮。桌面、768px 平板及 320px 手机无页面横向溢出；切换 GNSS / RTK 与配件保留已输入搜索词，手机能滚动至最后的配件并选中。检查结束后恢复空搜索词、全部分类及默认浏览器尺寸。截图 `product-category-relocated.png` 位于上述证据目录。`npm run build`（包含类型检查）、所修改 Vue 组件及 Vite 配置的 ESLint、`git diff --check` 通过。
+
+## 后续导航上下外部留白调整
+
+按最新红线标注，将页面顶部至导航的外部留白、导航至分类栏的间距分别减半。桌面顶部 padding 64→32px，catalog margin-top 82→41px；平板 40→20px、60→30px；手机 20→10px、42→21px。左右边距和导航内部尺寸保持原值。
+
+Chrome 实测 1470px、768px、320px 下对应间距与上述值一致，页面均无横向溢出；默认桌面导航顶部为 32px，高度仍为 74px。截图 `navigation-outer-spacing-halved.png` 位于上述证据目录，保留顶部、导航及分类栏的完整间距。检查结束后恢复默认浏览器尺寸。`npm run build`（包含类型检查）与 `git diff --check` 通过。
+
+## 后续 AI 导购占位入口
+
+按用户要求，在搜索框和订单图标之间加入宽 100px、高 40px 的圆角“AI 导购”按钮，沿用白底、石墨文字和轻边框。桌面搜索框因此左移 120px，为按钮及导航间距留出空间。按钮仅展示，无点击事件、路由或后端调用；标记 `aria-disabled="true"`，悬停或键盘聚焦提示“AI 导购 · 暂未开放”。
+
+窄屏断点调整到 767px：Logo 与 AI 导购分别位于首行左右两端，搜索及个人入口在第二行。Chrome 检查桌面 1470px、平板 768px、手机 320px 均无页面横向溢出；手机搜索宽 134px，按钮及入口正常显示，平板导航保持 74px 高度。检查后恢复默认浏览器尺寸。截图 `navigation-ai-guide-placeholder.png` 位于上述证据目录。`npm run build`（包含类型检查）、导航组件 ESLint 和 `git diff --check` 通过。
+
+## 后续 SVG 网页图标
+
+在 `index.html` 显式声明 `image/svg+xml` favicon，直接复用 `src/assets/jingwei-logo.svg`，删除旧 `public/favicon.ico`。Vite 构建输出独立 SVG 资源，并正确替换 HTML 中的路径，避免维护两份品牌图形。
+
+`npm run build`（包含类型检查）与 `git diff --check` 通过。开发页 DOM 确认原 favicon 来源为 SVG；浏览器自动化期间会临时以自身控制标记覆盖标签图标，因此该期间的原生浏览器截图不作为最终 favicon 视觉证据。

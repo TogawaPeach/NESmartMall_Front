@@ -69,6 +69,17 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
         </template>
       </ElInput>
 
+      <ElTooltip
+        content="AI 导购 · 暂未开放"
+        :trigger="['hover', 'focus']"
+        placement="bottom"
+        :show-after="150"
+      >
+        <ElButton class="ai-guide-button" aria-label="AI 导购 · 暂未开放" aria-disabled="true">
+          AI 导购
+        </ElButton>
+      </ElTooltip>
+
       <div class="utility-navigation" role="group" aria-label="个人入口">
         <ElTooltip
           v-for="item in utilityItems"
@@ -164,6 +175,27 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   cursor: pointer;
 }
 
+.ai-guide-button {
+  --el-button-text-color: #23282d;
+  --el-button-bg-color: #fff;
+  --el-button-border-color: #e3e6e8;
+  --el-button-hover-text-color: #23282d;
+  --el-button-hover-bg-color: #f7f8f8;
+  --el-button-hover-border-color: #cbd5dc;
+  --el-button-active-text-color: #23282d;
+  --el-button-active-bg-color: #f7f8f8;
+  --el-button-active-border-color: #cbd5dc;
+  flex-shrink: 0;
+  width: 100px;
+  height: 40px;
+  margin: 0;
+  padding: 0 16px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: default;
+}
+
 .utility-navigation {
   display: flex;
   flex-shrink: 0;
@@ -195,13 +227,14 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
 }
 
 .storefront-brand:focus-visible,
+.ai-guide-button:focus-visible,
 .utility-button:focus-visible,
 .search-submit:focus-visible {
   outline: 2px solid #899ca9;
   outline-offset: 3px;
 }
 
-@media (max-width: 599px) {
+@media (max-width: 767px) {
   .storefront-navigation {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -211,11 +244,20 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   }
 
   .storefront-brand {
-    grid-column: 1 / -1;
+    grid-column: 1;
+    grid-row: 1;
     justify-self: start;
   }
 
+  .ai-guide-button {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
   .product-search {
+    grid-column: 1;
+    grid-row: 2;
     width: 100%;
     max-width: 200px;
     min-width: 0;
@@ -223,6 +265,8 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   }
 
   .utility-navigation {
+    grid-column: 2;
+    grid-row: 2;
     gap: 2px;
   }
 
