@@ -118,3 +118,20 @@ Chrome 实测 1470px、768px、320px 下对应间距与上述值一致，页面�
 在 `index.html` 显式声明 `image/svg+xml` favicon，直接复用 `src/assets/jingwei-logo.svg`，删除旧 `public/favicon.ico`。Vite 构建输出独立 SVG 资源，并正确替换 HTML 中的路径，避免维护两份品牌图形。
 
 `npm run build`（包含类型检查）与 `git diff --check` 通过。开发页 DOM 确认原 favicon 来源为 SVG；浏览器自动化期间会临时以自身控制标记覆盖标签图标，因此该期间的原生浏览器截图不作为最终 favicon 视觉证据。
+
+## 后续秒杀与领券占位按钮
+
+按用户最终限定，仅在 Logo 与搜索框之间添加“限时秒杀”“领券中心”两个文字按钮，不新增页面、路由、点击处理或业务请求。两者桌面宽 100px、高 40px，沿用 AI 导购的字体、边框和圆角；秒杀使用浅暖色强调。按钮标记 `aria-disabled="true"`，悬停及键盘聚焦显示“暂未开放”。
+
+本次证据目录：`/Users/lightfull/.codex/visualizations/2026/10/11/01a129c3-8c68-7110-805e-5f3bcfeaa430/coupon-placement/`。
+
+- source visual truth：`02-navigation-before.jpg`；实现：`03-navigation-desktop.jpg`。均为当前 Chrome 首页，商品服务未就绪状态，1470 × 667 CSS viewport，截图均为 1470 × 667 像素；原尺寸比较，无密度缩放。
+- 全视图同图比较：`07-navigation-comparison.png`，2940 × 667 像素，左右分别为调整前和调整后。
+- 导航聚焦同图比较：`08-navigation-focused-comparison.png`，1470 × 240 像素，上下分别为调整前和调整后，用于核对字体、圆角、边框与原入口位置。
+- 手机：`04-navigation-mobile.jpg`，320 × 740；平板：`05-navigation-tablet.jpg`，768 × 1024。最终展示：`06-navigation-result.jpg`。
+
+五项视觉核对：中文系统字体、14px 字号与原 AI 导购一致；桌面导航及分类的原有位置和间距保留；白底、石墨文字、轻边框沿用原变量，秒杀浅暖色属于已讨论的强调；Logo 与图标复用原资产；新增文案与用户确认一致。1023px 及以下使用三行导航，中间一行两个活动按钮并排等宽，搜索和个人入口在末行，避免挤压。
+
+本轮首次全视图和聚焦对比未发现 actionable P0/P1/P2 视觉问题，无额外视觉修复迭代。浏览器检查 1470px、1024px、768px、320px 时页面 scrollWidth 均等于 viewport；键盘 Tab 可聚焦秒杀按钮并显示“暂未开放”Tooltip。默认浏览器尺寸和无浮层状态已恢复；error/warn 日志为空。`npm run build`（包含类型检查）、该组件 ESLint 与 `git diff --check` 通过。未添加业务功能或业务测试。
+
+final result: passed

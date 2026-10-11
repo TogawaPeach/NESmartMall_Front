@@ -16,6 +16,11 @@ const emit = defineEmits<{
 
 const router = useRouter()
 
+const promotionItems = [
+  { key: 'flash-sale', label: '限时秒杀' },
+  { key: 'coupons', label: '领券中心' },
+]
+
 const utilityItems = [
   { route: 'orders', label: '我的订单', icon: Tickets },
   { route: 'cart', label: '购物车', icon: ShoppingCart },
@@ -45,6 +50,26 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
       <RouterLink class="storefront-brand" :to="{ name: 'home' }" aria-label="经纬智选首页">
         <img class="brand-logo" :src="jingweiLogo" alt="经纬智选" width="64" height="56" />
       </RouterLink>
+
+      <div class="promotion-navigation" role="group" aria-label="商城活动">
+        <ElTooltip
+          v-for="item in promotionItems"
+          :key="item.key"
+          :content="`${item.label} · 暂未开放`"
+          :trigger="['hover', 'focus']"
+          placement="bottom"
+          :show-after="150"
+        >
+          <ElButton
+            class="promotion-button"
+            :class="{ 'promotion-button--sale': item.key === 'flash-sale' }"
+            :aria-label="`${item.label} · 暂未开放`"
+            aria-disabled="true"
+          >
+            {{ item.label }}
+          </ElButton>
+        </ElTooltip>
+      </div>
 
       <ElInput
         id="storefront-product-search"
@@ -175,7 +200,8 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   cursor: pointer;
 }
 
-.ai-guide-button {
+.ai-guide-button,
+.promotion-button {
   --el-button-text-color: #23282d;
   --el-button-bg-color: #fff;
   --el-button-border-color: #e3e6e8;
@@ -193,7 +219,27 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   border-radius: 24px;
   font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
   cursor: default;
+}
+
+.promotion-navigation {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.promotion-button--sale {
+  --el-button-text-color: #9a4a35;
+  --el-button-bg-color: #fff5f0;
+  --el-button-border-color: #ecd5cc;
+  --el-button-hover-text-color: #9a4a35;
+  --el-button-hover-bg-color: #fff0e8;
+  --el-button-hover-border-color: #dfbba9;
+  --el-button-active-text-color: #9a4a35;
+  --el-button-active-bg-color: #fff0e8;
+  --el-button-active-border-color: #dfbba9;
 }
 
 .utility-navigation {
@@ -228,13 +274,14 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
 
 .storefront-brand:focus-visible,
 .ai-guide-button:focus-visible,
+.promotion-button:focus-visible,
 .utility-button:focus-visible,
 .search-submit:focus-visible {
   outline: 2px solid #899ca9;
   outline-offset: 3px;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 1023px) {
   .storefront-navigation {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -255,9 +302,21 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
     justify-self: end;
   }
 
+  .promotion-navigation {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .promotion-button {
+    width: 100%;
+    min-width: 0;
+  }
+
   .product-search {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 3;
     width: 100%;
     max-width: 200px;
     min-width: 0;
@@ -266,7 +325,7 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
 
   .utility-navigation {
     grid-column: 2;
-    grid-row: 2;
+    grid-row: 3;
     gap: 2px;
   }
 
