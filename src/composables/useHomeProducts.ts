@@ -22,7 +22,7 @@ export function useHomeProducts() {
   let lastQueryKey: string | undefined
 
   async function load(force = false): Promise<void> {
-    const query = { category: category.value, keyword: keyword.value.trim(), limit: 10 }
+    const query = { category: category.value, keyword: keyword.value.trim(), limit: 8 }
     const queryKey = JSON.stringify(query)
     // Clearing via the clear icon and the keyword watcher can occur together.
     if (!force && queryKey === lastQueryKey) return

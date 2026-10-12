@@ -10,7 +10,6 @@ export interface ProductContract {
   confirmed: boolean
   endpoint: string
   query: {
-    sort: { parameter: string; value: string }
     categoryParameter: string | null
     keywordParameter: string | null
     /** Confirm whether an empty keyword is omitted or explicitly sent. */
@@ -49,26 +48,26 @@ export interface ProductContract {
 }
 
 /**
- * The all-products query is confirmed. Category and keyword filters remain
- * unconfigured until the backend supports them. See docs/product-api-contract.md.
+ * Sorting uses the backend default. Category IDs are agreed with the backend;
+ * its category filtering implementation is pending. Keyword search remains
+ * unconfigured. See docs/product-api-contract.md.
  */
 export const productContract: ProductContract = {
   confirmed: true,
   endpoint: import.meta.env.VITE_PRODUCTS_ENDPOINT?.trim() || '/api/products',
   query: {
-    sort: { parameter: 'sort', value: 'sales_desc' },
-    categoryParameter: null,
+    categoryParameter: 'categoryId',
     keywordParameter: null,
     sendEmptyKeyword: false,
     limit: { enabled: true, parameter: 'limit' },
     allCategory: { mode: 'omit', value: null },
   },
   categoryValues: {
-    'total-station': null,
-    'gnss-rtk': null,
-    level: null,
-    'distance-meter': null,
-    accessory: null,
+    'total-station': 1,
+    'gnss-rtk': 2,
+    level: 3,
+    'distance-meter': 4,
+    accessory: 5,
   },
   response: {
     listPath: ['data'],
@@ -109,8 +108,6 @@ export function validateProductContract(): void {
   const missing =
     !contract.confirmed ||
     !contract.endpoint ||
-    !query.sort.parameter.trim() ||
-    !query.sort.value.trim() ||
     query.sendEmptyKeyword === null ||
     query.limit.enabled === null ||
     (query.limit.enabled && !query.limit.parameter?.trim()) ||

@@ -2,9 +2,9 @@
 
 经纬智选商城前端，使用 Vue 3、TypeScript、Element Plus 与 Axios。
 
-首页默认选中“全部”，打开页面自动请求销量前十的商品。商品卡片展示封面、名称、人民币价格及购买人数，支持加载、空列表、失败和重试状态。后端价格以分为单位，前端转换为元（例如 `990` 展示为 `¥9.90`）。分类查询与关键词搜索的后端参数尚未提供，触发时显示暂未开放提示。
+首页默认选中“全部”，打开页面自动请求销量前八的商品，加载时显示八张骨架卡片。商品卡片展示封面、名称、人民币价格及购买人数，支持加载、空列表、失败和重试状态。后端价格以分为单位，前端转换为元（例如 `990` 展示为 `¥9.90`）。分类切换会发送 `categoryId`：全站仪 1、GNSS / RTK 2、水准仪 3、测距仪 4、配件 5；“全部”省略分类参数。前端已按此约定实现，后端分类筛选待接入。关键词搜索参数尚未提供，触发时显示暂未开放提示。
 
-开发服务将 `/api` 代理到 `http://localhost:8082`，默认请求 `/api/products?sort=sales_desc&limit=10`。部署地址可通过 `.env.example` 中的环境变量配置；参数、响应字段及价格单位集中在 `src/api/productContract.ts`。详情见 [商品接口契约](docs/product-api-contract.md)。
+开发服务将 `/api` 代理到 `http://localhost:8082`，默认请求 `/api/products?limit=8`，前端省略 `sort`，由后端默认按销量降序排列。部署地址可通过 `.env.example` 中的环境变量配置；参数、响应字段及价格单位集中在 `src/api/productContract.ts`。详情见 [商品接口契约](docs/product-api-contract.md)。
 
 首页组件位于 `src/components/storefront/`，页面位于 `src/views/HomeView.vue`，查询状态位于 `src/composables/useHomeProducts.ts`。订单、购物车、用户入口及查看全部在对应路由未实现时禁用。
 

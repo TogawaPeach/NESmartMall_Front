@@ -1,12 +1,29 @@
 # 首页商品接口
 
-首页默认停留在“全部”，组件挂载时自动查询销量前十的商品：
+首页默认停留在“全部”，组件挂载时自动查询销量前八的商品，加载时显示八张骨架卡片：
 
 ```http
-GET http://localhost:8082/api/products?sort=sales_desc&limit=10
+GET http://localhost:8082/api/products?limit=8
 ```
 
 开发环境由 `vite.config.ts` 将前端的 `/api` 请求代理到 `http://localhost:8082`，避免浏览器跨域。修改代理配置后需要重新启动开发服务。生产构建默认使用前端同源的 `/api/products`；部署时需配置服务器 API 反向代理，或在构建前通过 `VITE_API_BASE_URL` 指定允许跨域访问的后端地址。`VITE_PRODUCTS_ENDPOINT` 可覆盖默认路径。环境变量不可包含密钥。
+
+## 分类与排序
+
+前端不发送 `sort`，统一使用后端默认的销量降序排序。“全部”省略 `categoryId`，其他分类按以下固定映射发送：
+
+| 选项卡 | categoryId |
+| --- | --- |
+| 全部 | 不传 |
+| 全站仪 | 1 |
+| GNSS / RTK | 2 |
+| 水准仪 | 3 |
+| 测距仪 | 4 |
+| 配件 | 5 |
+
+例如选择全站仪时发送 `GET /api/products?categoryId=1&limit=8`。参数顺序不影响请求含义。切回“全部”重新查询并省略分类参数。每次分类查询和重试均最多展示八条结果，等待响应期间显示八张骨架卡片。
+
+前端已按此约定发送请求；后端仍需接收可选的 `categoryId`，先按分类筛选，再按销量降序取前八条。不传分类时查询全部分类；传入分类时仅返回该分类的商品。
 
 ## 返回结构
 
@@ -32,14 +49,14 @@ GET http://localhost:8082/api/products?sort=sales_desc&limit=10
 
 ## 配置与状态
 
-- `src/api/productContract.ts`：接口路径、`sort=sales_desc`、`limit`、字段路径、业务成功状态及价格单位。
+- `src/api/productContract.ts`：接口路径、`categoryId` 与分类 ID 映射、`limit`、字段路径、业务成功状态及价格单位；排序使用后端默认规则。
 - `src/api/products.ts`：GET 查询、响应校验、价格转换及购买人数映射，最多保留请求指定的条数。
-- `src/composables/useHomeProducts.ts`：默认分类、十条查询、加载/成功/空列表/失败状态、重试及请求取消。只应用最新请求，避免旧响应覆盖新结果。
+- `src/composables/useHomeProducts.ts`：默认分类、八条查询、加载/成功/空列表/失败状态、重试及请求取消。只应用最新请求，避免旧响应覆盖新结果。
 - `src/components/storefront/ProductCard.vue`：简介卡布局、价格格式和购买人数显示。
 
 只有业务成功且 `data: []` 时显示空列表。网络失败、超时、业务失败、列表非数组、重复商品 ID、字段类型异常均显示失败提示。首页不填充演示商品。
 
-当前仅接通“全部”销量排序查询。分类参数与实际分类 ID、关键词参数尚未确认，对应配置保留 `null`；触发尚未开放的查询时在发送请求前显示具体提示，选择“全部”并清空搜索词即可恢复。未来接入筛选时填写真实参数名和分类值。
+关键词参数尚未确认，对应配置保留 `null`；触发关键词搜索时在发送请求前显示暂未开放提示，清空搜索词即可恢复分类查询。
 
 ## 验证
 
@@ -47,4 +64,4 @@ GET http://localhost:8082/api/products?sort=sales_desc&limit=10
 npm run build
 ```
 
-启动后端与 `npm run dev` 后，访问首页检查商品图片、名称、`¥9.90` 和“0人购买”。接口不足十条时只展示实际返回条数。
+启动后端与 `npm run dev` 后，访问首页检查商品图片、名称、`¥9.90` 和“0人购买”。接口不足八条时只展示实际返回条数。后端完成分类筛选后，核验五个分类对应的请求参数与返回商品，切回“全部”时不传 `categoryId`，所有请求均不传 `sort`。

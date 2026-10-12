@@ -4,7 +4,7 @@ import { ElSkeleton, ElSkeletonItem } from 'element-plus'
 
 <template>
   <div class="product-grid" aria-hidden="true">
-    <ElSkeleton v-for="index in 10" :key="index" class="skeleton-card" animated>
+    <ElSkeleton v-for="index in 8" :key="index" class="skeleton-card" animated>
       <template #template>
         <ElSkeletonItem variant="image" class="skeleton-image" />
         <div class="skeleton-details">

@@ -100,7 +100,7 @@ function mapProduct(source: unknown): Product {
 
 function buildParams(query: ProductQuery): Record<string, string | number> {
   const config = productContract.query
-  const params: Record<string, string | number> = { [config.sort.parameter]: config.sort.value }
+  const params: Record<string, string | number> = {}
   if (
     query.category !== 'all' &&
     (!config.categoryParameter || productContract.categoryValues[query.category] === null)
