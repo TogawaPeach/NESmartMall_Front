@@ -252,6 +252,9 @@ const title = computed(() =>
   --el-pagination-button-bg-color: transparent;
   gap: 6px;
 }
+.pagination :deep(.el-pager) {
+  gap: 8px;
+}
 .pagination :deep(.el-pager li),
 .pagination :deep(.btn-prev),
 .pagination :deep(.btn-next) {
