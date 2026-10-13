@@ -74,7 +74,7 @@ const viewAllLocation = computed(() => productListLocation(category.value))
         </div>
       </section>
 
-      <div class="catalog-actions">
+      <div v-if="state === 'success' && products.length >= 8" class="catalog-actions">
         <ElTooltip content="在新标签页中查看" :trigger="['hover', 'focus']">
           <RouterLink
             class="view-all view-all-bottom"
