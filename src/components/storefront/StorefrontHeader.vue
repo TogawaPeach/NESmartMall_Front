@@ -8,11 +8,13 @@ import { productSearchLocation } from '@/constants/productCategories'
 
 const props = defineProps<{
   keyword: string
+  searchInPlace?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:keyword': [value: string]
   'clear-search': []
+  search: [keyword: string]
 }>()
 
 const router = useRouter()
@@ -34,6 +36,10 @@ function search() {
     return
   }
   showSearchWarning.value = false
+  if (props.searchInPlace) {
+    emit('search', keyword)
+    return
+  }
   const { href } = router.resolve(productSearchLocation(keyword))
   // Open synchronously from the click/Enter gesture so browsers allow the new tab.
   window.open(href, '_blank', 'noopener,noreferrer')
@@ -110,7 +116,7 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
           <button
             class="search-submit"
             type="button"
-            aria-label="搜索商品（在新标签页中打开）"
+            :aria-label="searchInPlace ? '搜索商品' : '搜索商品（在新标签页中打开）'"
             @click="search"
           >
             <ElIcon aria-hidden="true"><Search /></ElIcon>

@@ -23,6 +23,7 @@ const {
   errorKind,
   errorMessage,
   selectCategory,
+  search,
   clearSearch,
   retry,
 } = useProductList()
@@ -39,7 +40,12 @@ const title = computed(() =>
 <template>
   <div class="storefront product-list">
     <a class="skip-link" href="#product-list">跳转到商品列表</a>
-    <StorefrontHeader v-model:keyword="keyword" @clear-search="clearSearch" />
+    <StorefrontHeader
+      v-model:keyword="keyword"
+      :search-in-place="isSearch"
+      @search="search"
+      @clear-search="clearSearch"
+    />
 
     <main id="product-list" class="catalog" aria-labelledby="catalog-title" tabindex="-1">
       <nav class="breadcrumb" aria-label="当前位置">

@@ -120,6 +120,19 @@ export function useProductList() {
     keyword.value = ''
   }
 
+  function search(value: string): void {
+    const nextKeyword = value.trim()
+    if (!nextKeyword) return
+    keyword.value = nextKeyword
+    const location = productSearchLocation(nextKeyword)
+    if (router.resolve(location).fullPath === route.fullPath) {
+      // Re-submitting the first-page search still refreshes its results.
+      void load()
+      return
+    }
+    void router.push(location)
+  }
+
   watch(
     () => [route.query.category, route.query.page, route.query.keyword],
     () => {
@@ -156,6 +169,7 @@ export function useProductList() {
     errorKind,
     errorMessage,
     selectCategory,
+    search,
     clearSearch,
     retry: load,
   }
