@@ -24,6 +24,7 @@ const {
 const viewAllLabel = computed(() =>
   category.value === 'all' ? '查看全部商品' : `查看全部${productCategoryLabel(category.value)}`,
 )
+const viewAllLocation = computed(() => productListLocation(category.value))
 </script>
 
 <template>
@@ -38,7 +39,7 @@ const viewAllLabel = computed(() =>
         <ElTooltip content="在新标签页中查看" :trigger="['hover', 'focus']">
           <RouterLink
             class="view-all"
-            :to="productListLocation(category)"
+            :to="viewAllLocation"
             target="_blank"
             rel="noopener noreferrer"
             :aria-label="`${viewAllLabel}（在新标签页中打开）`"
@@ -72,6 +73,21 @@ const viewAllLabel = computed(() =>
           <ElButton class="retry-button" :icon="RefreshRight" @click="retry">重试</ElButton>
         </div>
       </section>
+
+      <div class="catalog-actions">
+        <ElTooltip content="在新标签页中查看" :trigger="['hover', 'focus']">
+          <RouterLink
+            class="view-all view-all-bottom"
+            :to="viewAllLocation"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="查看全部商品（在新标签页中打开）"
+          >
+            <span>查看全部商品</span>
+            <ElIcon aria-hidden="true"><ArrowRight /></ElIcon>
+          </RouterLink>
+        </ElTooltip>
+      </div>
     </main>
 
     <footer class="storefront-footer">经纬智选 · 测绘工具商城</footer>
@@ -136,6 +152,29 @@ const viewAllLabel = computed(() =>
   outline: 2px solid #899ca9;
   outline-offset: 4px;
   border-radius: 4px;
+}
+
+.catalog-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.view-all.view-all-bottom {
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  margin-left: 0;
+  padding: 0 28px;
+  border: 1px solid var(--store-border);
+  border-radius: 22px;
+  background: var(--store-surface);
+  font-size: 16px;
+}
+
+.view-all-bottom:hover {
+  border-color: #cbd5dc;
+  background: var(--store-selected);
 }
 
 .catalog-content {
@@ -203,7 +242,7 @@ const viewAllLabel = computed(() =>
 }
 
 .storefront-footer {
-  margin-top: 56px;
+  margin-top: 28px;
   margin-inline: var(--store-module-inset);
   padding: 30px 0 12px;
   border-top: 1px solid var(--store-border);
@@ -274,7 +313,7 @@ const viewAllLabel = computed(() =>
   }
 
   .storefront-footer {
-    margin-top: 32px;
+    margin-top: 24px;
     padding: 24px 2px 8px;
     font-size: 15px;
   }
