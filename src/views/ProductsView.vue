@@ -160,7 +160,7 @@ const title = computed(() =>
   color: var(--store-text);
 }
 .breadcrumb a:focus-visible {
-  outline: 2px solid #899ca9;
+  outline: 2px solid var(--store-focus);
   outline-offset: 4px;
 }
 
@@ -221,7 +221,7 @@ const title = computed(() =>
 
 .state-icon {
   margin-bottom: 22px;
-  color: #87949d;
+  color: var(--store-state-icon);
   font-size: 44px;
 }
 .state-title {
@@ -249,7 +249,7 @@ const title = computed(() =>
 
 .retry-button.el-button:hover {
   background: var(--store-selected);
-  border-color: #cbd5dc;
+  border-color: var(--store-border-hover);
 }
 
 .pagination {

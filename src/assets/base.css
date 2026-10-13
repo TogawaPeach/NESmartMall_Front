@@ -2,8 +2,9 @@
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', sans-serif;
-  color: #23282d;
-  background: #f7f8f8;
+  color-scheme: light;
+  color: var(--store-text);
+  background: var(--store-background);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -15,6 +16,50 @@
   --store-muted: #646d75;
   --store-border: #e3e6e8;
   --store-selected: #edf2f5;
+  --store-hover: #f4f6f7;
+  --store-filter-background: #fafbfb;
+  --store-border-hover: #cbd5dc;
+  --store-input-border-hover: #b4c0c8;
+  --store-scrollbar: #dce2e6;
+  --store-accent: #536b7a;
+  --store-focus: #899ca9;
+  --store-focus-ring: #627d8d;
+  --store-state-icon: #87949d;
+  --store-placeholder: #879198;
+  --store-price: #ff5000;
+  --store-sale-text: #9a4a35;
+  --store-sale-background: #fff5f0;
+  --store-sale-border: #ecd5cc;
+  --store-sale-hover: #fff0e8;
+  --store-sale-border-hover: #dfbba9;
+  --store-header-shadow: 0 4px 12px rgb(35 40 45 / 4%);
+}
+
+:root.dark {
+  color-scheme: dark;
+  --store-background: #14181c;
+  --store-surface: #1e242a;
+  --store-text: #e8edf1;
+  --store-muted: #a8b3bd;
+  --store-border: #38434d;
+  --store-selected: #354652;
+  --store-hover: #2b353e;
+  --store-filter-background: #1b2127;
+  --store-border-hover: #607584;
+  --store-input-border-hover: #718593;
+  --store-scrollbar: #4a5966;
+  --store-accent: #acc9db;
+  --store-focus: #9abfd5;
+  --store-focus-ring: #9abfd5;
+  --store-state-icon: #a4b2bd;
+  --store-placeholder: #a4b2bd;
+  --store-price: #ff925e;
+  --store-sale-text: #ffc2a8;
+  --store-sale-background: #362923;
+  --store-sale-border: #765443;
+  --store-sale-hover: #483228;
+  --store-sale-border-hover: #ad795f;
+  --store-header-shadow: 0 4px 12px rgb(0 0 0 / 18%);
 }
 
 *,
@@ -46,7 +91,7 @@ input {
 }
 
 :focus-visible {
-  outline: 2px solid #627d8d;
+  outline: 2px solid var(--store-focus-ring);
   outline-offset: 4px;
 }
 

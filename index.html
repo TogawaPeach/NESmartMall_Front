@@ -4,7 +4,18 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/src/assets/jingwei-logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#F7F8F8" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f7f8f8" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14181c" media="(prefers-color-scheme: dark)" />
+    <script>
+      // Apply the system theme before rendering and keep it in sync while the page is open.
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)')
+      function syncSystemTheme() {
+        document.documentElement.classList.toggle('dark', systemTheme.matches)
+      }
+      syncSystemTheme()
+      systemTheme.addEventListener('change', syncSystemTheme)
+    </script>
     <meta
       name="description"
       content="经纬智选测绘工具商城，查询全站仪、GNSS / RTK、水准仪、测距仪与配件。"

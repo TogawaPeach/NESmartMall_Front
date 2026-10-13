@@ -1,22 +1,39 @@
 @import './base.css';
 
+:root,
+:root.dark {
+  --el-color-primary: var(--store-accent);
+  --el-text-color-primary: var(--store-text);
+  --el-text-color-regular: var(--store-muted);
+  --el-border-color: var(--store-border);
+  --el-border-color-light: var(--store-border);
+  --el-fill-color-light: var(--store-background);
+  --el-bg-color-page: var(--store-background);
+  --el-bg-color: var(--store-surface);
+  --el-bg-color-overlay: var(--store-surface);
+  --el-fill-color-blank: var(--store-surface);
+  --el-border-radius-base: 10px;
+  --el-font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', sans-serif;
+}
+
 :root {
-  --el-color-primary: #536b7a;
   --el-color-primary-light-3: #80929e;
   --el-color-primary-light-5: #a6b3bc;
   --el-color-primary-light-7: #d1d9df;
   --el-color-primary-light-8: #e3e9ed;
   --el-color-primary-light-9: #edf2f5;
   --el-color-primary-dark-2: #3f5360;
-  --el-text-color-primary: #23282d;
-  --el-text-color-regular: #646d75;
-  --el-border-color: #e3e6e8;
-  --el-border-color-light: #e3e6e8;
-  --el-fill-color-light: #f7f8f8;
-  --el-border-radius-base: 10px;
-  --el-font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', sans-serif;
+}
+
+:root.dark {
+  --el-color-primary-light-3: #829dad;
+  --el-color-primary-light-5: #637b8a;
+  --el-color-primary-light-7: #445966;
+  --el-color-primary-light-8: #354652;
+  --el-color-primary-light-9: #2b353e;
+  --el-color-primary-dark-2: #c6deec;
 }
 
 #app {

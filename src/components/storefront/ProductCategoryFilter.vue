@@ -36,7 +36,7 @@ const emit = defineEmits<{
   padding: 3px;
   margin: -3px;
   scrollbar-width: thin;
-  scrollbar-color: #dce2e6 transparent;
+  scrollbar-color: var(--store-scrollbar) transparent;
 }
 
 .category-box {
@@ -47,20 +47,20 @@ const emit = defineEmits<{
   width: max-content;
   gap: 6px;
   padding: 4px;
-  border: 1px solid #e3e6e8;
+  border: 1px solid var(--store-border);
   border-radius: 28px;
-  background: #fafbfb;
+  background: var(--store-filter-background);
 }
 
 .category-button {
-  --el-button-text-color: #23282d;
+  --el-button-text-color: var(--store-text);
   --el-button-bg-color: transparent;
   --el-button-border-color: transparent;
-  --el-button-hover-text-color: #23282d;
-  --el-button-hover-bg-color: #f4f6f7;
+  --el-button-hover-text-color: var(--store-text);
+  --el-button-hover-bg-color: var(--store-hover);
   --el-button-hover-border-color: transparent;
-  --el-button-active-text-color: #23282d;
-  --el-button-active-bg-color: #edf2f5;
+  --el-button-active-text-color: var(--store-text);
+  --el-button-active-bg-color: var(--store-selected);
   --el-button-active-border-color: transparent;
   flex-shrink: 0;
   height: 40px;
@@ -72,13 +72,13 @@ const emit = defineEmits<{
 }
 
 .category-button.is-selected {
-  --el-button-bg-color: #edf2f5;
-  --el-button-hover-bg-color: #edf2f5;
+  --el-button-bg-color: var(--store-selected);
+  --el-button-hover-bg-color: var(--store-selected);
   font-weight: 600;
 }
 
 .category-button:focus-visible {
-  outline: 2px solid #899ca9;
+  outline: 2px solid var(--store-focus);
   outline-offset: 3px;
 }
 

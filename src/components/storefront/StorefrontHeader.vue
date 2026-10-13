@@ -182,10 +182,10 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   gap: 20px;
   min-height: 72px;
   padding: 9px 18px;
-  border: 1px solid #e3e6e8;
+  border: 1px solid var(--store-border);
   border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 4px 12px rgb(35 40 45 / 4%);
+  background: var(--store-surface);
+  box-shadow: var(--store-header-shadow);
 }
 
 .storefront-brand {
@@ -206,12 +206,12 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
 }
 
 .product-search {
-  --el-input-border-color: #e3e6e8;
-  --el-input-hover-border-color: #b4c0c8;
-  --el-input-focus-border-color: #899ca9;
-  --el-input-bg-color: #f7f8f8;
-  --el-input-text-color: #23282d;
-  --el-input-placeholder-color: #646d75;
+  --el-input-border-color: var(--store-border);
+  --el-input-hover-border-color: var(--store-input-border-hover);
+  --el-input-focus-border-color: var(--store-focus);
+  --el-input-bg-color: var(--store-background);
+  --el-input-text-color: var(--store-text);
+  --el-input-placeholder-color: var(--store-muted);
   flex: 0 0 200px;
   width: 200px;
   height: 40px;
@@ -238,22 +238,22 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   border: 0;
   border-radius: 5px;
   background: transparent;
-  color: #23282d;
+  color: var(--store-text);
   font-size: 20px;
   cursor: pointer;
 }
 
 .ai-guide-button,
 .promotion-button {
-  --el-button-text-color: #23282d;
-  --el-button-bg-color: #fff;
-  --el-button-border-color: #e3e6e8;
-  --el-button-hover-text-color: #23282d;
-  --el-button-hover-bg-color: #f7f8f8;
-  --el-button-hover-border-color: #cbd5dc;
-  --el-button-active-text-color: #23282d;
-  --el-button-active-bg-color: #f7f8f8;
-  --el-button-active-border-color: #cbd5dc;
+  --el-button-text-color: var(--store-text);
+  --el-button-bg-color: var(--store-surface);
+  --el-button-border-color: var(--store-border);
+  --el-button-hover-text-color: var(--store-text);
+  --el-button-hover-bg-color: var(--store-background);
+  --el-button-hover-border-color: var(--store-border-hover);
+  --el-button-active-text-color: var(--store-text);
+  --el-button-active-bg-color: var(--store-background);
+  --el-button-active-border-color: var(--store-border-hover);
   flex-shrink: 0;
   width: 100px;
   height: 40px;
@@ -274,15 +274,15 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
 }
 
 .promotion-button--sale {
-  --el-button-text-color: #9a4a35;
-  --el-button-bg-color: #fff5f0;
-  --el-button-border-color: #ecd5cc;
-  --el-button-hover-text-color: #9a4a35;
-  --el-button-hover-bg-color: #fff0e8;
-  --el-button-hover-border-color: #dfbba9;
-  --el-button-active-text-color: #9a4a35;
-  --el-button-active-bg-color: #fff0e8;
-  --el-button-active-border-color: #dfbba9;
+  --el-button-text-color: var(--store-sale-text);
+  --el-button-bg-color: var(--store-sale-background);
+  --el-button-border-color: var(--store-sale-border);
+  --el-button-hover-text-color: var(--store-sale-text);
+  --el-button-hover-bg-color: var(--store-sale-hover);
+  --el-button-hover-border-color: var(--store-sale-border-hover);
+  --el-button-active-text-color: var(--store-sale-text);
+  --el-button-active-bg-color: var(--store-sale-hover);
+  --el-button-active-border-color: var(--store-sale-border-hover);
 }
 
 .utility-navigation {
@@ -293,14 +293,14 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
 }
 
 .utility-button {
-  --el-button-text-color: #23282d;
+  --el-button-text-color: var(--store-text);
   --el-button-bg-color: transparent;
   --el-button-border-color: transparent;
-  --el-button-hover-text-color: #23282d;
-  --el-button-hover-bg-color: #edf2f5;
+  --el-button-hover-text-color: var(--store-text);
+  --el-button-hover-bg-color: var(--store-selected);
   --el-button-hover-border-color: transparent;
-  --el-button-active-text-color: #23282d;
-  --el-button-active-bg-color: #edf2f5;
+  --el-button-active-text-color: var(--store-text);
+  --el-button-active-bg-color: var(--store-selected);
   --el-button-active-border-color: transparent;
   width: 36px;
   height: 40px;
@@ -320,7 +320,7 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
 .promotion-button:focus-visible,
 .utility-button:focus-visible,
 .search-submit:focus-visible {
-  outline: 2px solid #899ca9;
+  outline: 2px solid var(--store-focus);
   outline-offset: 3px;
 }
 

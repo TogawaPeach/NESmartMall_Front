@@ -145,11 +145,11 @@ const viewAllLocation = computed(() => productListLocation(category.value, 1))
 
 .view-all:hover {
   background: transparent;
-  color: #536b7a;
+  color: var(--store-accent);
 }
 
 .view-all:focus-visible {
-  outline: 2px solid #899ca9;
+  outline: 2px solid var(--store-focus);
   outline-offset: 4px;
   border-radius: 4px;
 }
@@ -173,7 +173,7 @@ const viewAllLocation = computed(() => productListLocation(category.value, 1))
 }
 
 .view-all-bottom:hover {
-  border-color: #cbd5dc;
+  border-color: var(--store-border-hover);
   background: var(--store-selected);
 }
 
@@ -208,7 +208,7 @@ const viewAllLocation = computed(() => productListLocation(category.value, 1))
 
 .state-icon {
   margin-bottom: 22px;
-  color: #87949d;
+  color: var(--store-state-icon);
   font-size: 44px;
 }
 
@@ -238,7 +238,7 @@ const viewAllLocation = computed(() => productListLocation(category.value, 1))
 
 .retry-button.el-button:hover {
   background: var(--store-selected);
-  border-color: #cbd5dc;
+  border-color: var(--store-border-hover);
 }
 
 .storefront-footer {

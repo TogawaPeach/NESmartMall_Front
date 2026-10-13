@@ -100,7 +100,7 @@ const sales = computed(() =>
   width: auto;
   height: auto;
   border-radius: 10px;
-  background: #f7f8f8;
+  background: var(--store-background);
 }
 
 .product-image-area > .image-placeholder {
@@ -118,8 +118,8 @@ const sales = computed(() =>
   gap: 12px;
   width: 100%;
   height: 100%;
-  color: #879198;
-  background: #f7f8f8;
+  color: var(--store-placeholder);
+  background: var(--store-background);
   border-radius: 8px;
   font-size: 14px;
 }
@@ -164,7 +164,7 @@ const sales = computed(() =>
   align-items: baseline;
   gap: 2px;
   margin: 0;
-  color: #ff5000;
+  color: var(--store-price);
   font-size: 28px;
   font-weight: 650;
   line-height: 1.25;
