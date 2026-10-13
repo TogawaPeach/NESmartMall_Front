@@ -90,10 +90,11 @@ export const productContract: ProductContract = {
 /** The catalogue always uses twelve products per page, enforced by the backend. */
 export const PRODUCT_PAGE_SIZE = 12
 
-/** Frontend pagination contract; the backend endpoint is pending implementation. */
+/** Pagination and search request/response mappings. */
 export const productPageContract = {
   endpoint: import.meta.env.VITE_PRODUCT_PAGE_ENDPOINT?.trim() || '/api/products/page',
   pageParameter: 'pageNum',
+  keywordParameter: 'keyword',
   response: {
     listPath: ['data', 'list'],
     totalPath: ['data', 'total'],

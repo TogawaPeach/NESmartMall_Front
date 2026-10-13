@@ -17,20 +17,20 @@ const {
   errorKind,
   errorMessage,
   selectCategory,
-  search,
   clearSearch,
   retry,
 } = useHomeProducts()
 const viewAllLabel = computed(() =>
   category.value === 'all' ? '查看全部商品' : `查看全部${productCategoryLabel(category.value)}`,
 )
-const viewAllLocation = computed(() => productListLocation(category.value))
+// Each homepage entry opens the selected category from the first page.
+const viewAllLocation = computed(() => productListLocation(category.value, 1))
 </script>
 
 <template>
   <div class="storefront">
     <a class="skip-link" href="#catalog">跳转到商品区域</a>
-    <StorefrontHeader v-model:keyword="keyword" @search="search" @clear-search="clearSearch" />
+    <StorefrontHeader v-model:keyword="keyword" @clear-search="clearSearch" />
 
     <main id="catalog" class="catalog" aria-labelledby="catalog-title" tabindex="-1">
       <div class="catalog-heading">
@@ -81,9 +81,9 @@ const viewAllLocation = computed(() => productListLocation(category.value))
             :to="viewAllLocation"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="查看全部商品（在新标签页中打开）"
+            :aria-label="`${viewAllLabel}（在新标签页中打开）`"
           >
-            <span>查看全部商品</span>
+            <span>{{ viewAllLabel }}</span>
             <ElIcon aria-hidden="true"><ArrowRight /></ElIcon>
           </RouterLink>
         </ElTooltip>

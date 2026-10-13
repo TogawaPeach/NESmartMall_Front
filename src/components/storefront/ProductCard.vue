@@ -85,16 +85,29 @@ const sales = computed(() =>
 }
 
 .product-image-area {
+  position: relative;
+  width: 100%;
   aspect-ratio: 1;
   padding: 12px 12px 0;
   flex-shrink: 0;
+  overflow: hidden;
 }
 
 .product-image {
-  width: 100%;
-  height: 100%;
+  /* Keep intrinsic image dimensions from enlarging the square display area. */
+  position: absolute;
+  inset: 12px 12px 0;
+  width: auto;
+  height: auto;
   border-radius: 10px;
   background: #f7f8f8;
+}
+
+.product-image-area > .image-placeholder {
+  position: absolute;
+  inset: 12px 12px 0;
+  width: auto;
+  height: auto;
 }
 
 .image-placeholder {

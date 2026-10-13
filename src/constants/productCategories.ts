@@ -26,3 +26,10 @@ export function productListLocation(category: ProductCategoryKey, page = 1) {
     },
   }
 }
+
+export function productSearchLocation(keyword: string, page = 1) {
+  return {
+    name: 'products',
+    query: { keyword: keyword.trim(), page: String(page) },
+  }
+}

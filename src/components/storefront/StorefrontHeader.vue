@@ -1,20 +1,43 @@
 <script setup lang="ts">
-import { ElButton, ElIcon, ElInput, ElTooltip } from 'element-plus'
+import { ref, watch } from 'vue'
+import { ElAlert, ElButton, ElIcon, ElInput, ElTooltip } from 'element-plus'
 import { Search, ShoppingCart, Tickets, User } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import jingweiLogo from '@/assets/jingwei-logo.svg'
+import { productSearchLocation } from '@/constants/productCategories'
 
-defineProps<{
+const props = defineProps<{
   keyword: string
 }>()
 
 const emit = defineEmits<{
   'update:keyword': [value: string]
-  search: []
   'clear-search': []
 }>()
 
 const router = useRouter()
+const searchInput = ref<InstanceType<typeof ElInput>>()
+const showSearchWarning = ref(false)
+
+watch(
+  () => props.keyword,
+  (value) => {
+    if (value.trim()) showSearchWarning.value = false
+  },
+)
+
+function search() {
+  const keyword = props.keyword.trim()
+  if (!keyword) {
+    showSearchWarning.value = true
+    searchInput.value?.focus()
+    return
+  }
+  showSearchWarning.value = false
+  const { href } = router.resolve(productSearchLocation(keyword))
+  // Open synchronously from the click/Enter gesture so browsers allow the new tab.
+  window.open(href, '_blank', 'noopener,noreferrer')
+}
 
 const promotionItems = [
   { key: 'flash-sale', label: '限时秒杀' },
@@ -40,7 +63,7 @@ function openUtility(route: string) {
 function handleSearchEnter(event: KeyboardEvent | Event) {
   if (!(event instanceof KeyboardEvent) || event.isComposing || event.keyCode === 229) return
   event.preventDefault()
-  emit('search')
+  search()
 }
 </script>
 
@@ -72,6 +95,7 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
       </div>
 
       <ElInput
+        ref="searchInput"
         id="storefront-product-search"
         class="product-search"
         :model-value="keyword"
@@ -86,8 +110,8 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
           <button
             class="search-submit"
             type="button"
-            aria-label="搜索当前分类商品"
-            @click="emit('search')"
+            aria-label="搜索商品（在新标签页中打开）"
+            @click="search"
           >
             <ElIcon aria-hidden="true"><Search /></ElIcon>
           </button>
@@ -125,12 +149,25 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
         </ElTooltip>
       </div>
     </nav>
+    <ElAlert
+      v-if="showSearchWarning"
+      class="search-warning"
+      title="请输入搜索词"
+      type="warning"
+      center
+      show-icon
+      :closable="false"
+    />
   </header>
 </template>
 
 <style scoped>
 .storefront-header {
   margin-inline: var(--store-module-inset, 0px);
+}
+
+.search-warning {
+  margin-top: 12px;
 }
 
 .storefront-navigation {

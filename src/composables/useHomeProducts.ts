@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { ProductContractError, ProductResponseError } from '@/api/productContract'
 import { queryProducts } from '@/api/products'
 import type {
@@ -18,13 +18,11 @@ export function useHomeProducts() {
   const errorMessage = ref('')
   let controller: AbortController | undefined
   let sequence = 0
-  let mounted = false
   let lastQueryKey: string | undefined
 
   async function load(force = false): Promise<void> {
-    const query = { category: category.value, keyword: keyword.value.trim(), limit: 8 }
+    const query = { category: category.value, keyword: '', limit: 8 }
     const queryKey = JSON.stringify(query)
-    // Clearing via the clear icon and the keyword watcher can occur together.
     if (!force && queryKey === lastQueryKey) return
     lastQueryKey = queryKey
     const requestSequence = ++sequence
@@ -65,30 +63,19 @@ export function useHomeProducts() {
     void load()
   }
 
-  function search(): void {
-    void load(true)
-  }
-
   function clearSearch(): void {
     keyword.value = ''
-    void load()
   }
 
   function retry(): void {
     void load(true)
   }
 
-  watch(keyword, (value, previousValue) => {
-    if (mounted && !value.trim() && previousValue.trim()) void load()
-  })
-
   onMounted(() => {
-    mounted = true
     void load()
   })
 
   onBeforeUnmount(() => {
-    mounted = false
     ++sequence
     controller?.abort()
   })
@@ -101,7 +88,6 @@ export function useHomeProducts() {
     errorKind,
     errorMessage,
     selectCategory,
-    search,
     clearSearch,
     retry,
   }

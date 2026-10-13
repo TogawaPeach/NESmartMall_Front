@@ -58,7 +58,7 @@ GET http://localhost:8082/api/products?limit=8
 
 只有业务成功且 `data: []` 时显示空列表。网络失败、超时、业务失败、列表非数组、重复商品 ID、字段类型异常均显示失败提示。首页不填充演示商品。
 
-关键词参数尚未确认，对应配置保留 `null`；触发关键词搜索时在发送请求前显示暂未开放提示，清空搜索词即可恢复分类查询。
+首页商品查询不发送关键词。搜索栏独立校验输入，并在新标签页打开搜索结果；搜索使用下面的分页接口，不影响首页分类商品。
 
 ## 商品列表分页接口（后端待实现）
 
@@ -71,7 +71,7 @@ GET /api/products/page?pageNum=1
 GET /api/products/page?categoryId=1&pageNum=2
 ```
 
-`pageNum` 从 1 开始，必须为正安全整数。分类 ID 使用上述固定映射，“全部”省略 `categoryId`。前端不发送 `pageSize`、`limit`、`sort` 或关键词；后端固定每页最多 12 件商品，并使用默认排序。切换分类从第 1 页查询。
+`pageNum` 从 1 开始，必须为正安全整数。分类 ID 使用上述固定映射，“全部”省略 `categoryId`。分类浏览不发送关键词，搜索请求发送 `keyword` 并省略 `categoryId`。前端不发送 `pageSize`、`limit` 或 `sort`；后端固定每页最多 12 件商品，并使用默认排序。切换分类从第 1 页查询。
 
 后端分页响应需同时返回本页商品和当前分类下的商品总数，例如：
 
@@ -102,7 +102,22 @@ GET /api/products/page?categoryId=1&pageNum=2
 
 Element Plus 分页组件固定 `page-size="12"`，使用 `layout="prev, pager, next"`，不提供每页条数选择器。分页组件的 `total` 直接使用后端响应；例如当前分类有 50 件商品，共 5 页，最后一页 2 件。后端未实现、网络失败、业务失败或分页字段不符合约定时，列表页显示失败状态并允许重试。
 
-分页相关适配入口为 `src/api/products.ts` 的 `queryProductPage({ category, pageNum })`；固定页大小为导出的 `PRODUCT_PAGE_SIZE`。`src/api/productContract.ts` 中的 `productPageContract` 配置路径和分页字段映射，复用首页商品字段映射及响应校验。
+分页相关适配入口为 `src/api/products.ts` 的 `queryProductPage({ category, pageNum, keyword? })`；固定页大小为导出的 `PRODUCT_PAGE_SIZE`。`src/api/productContract.ts` 中的 `productPageContract` 配置路径、关键词参数和分页字段映射，复用首页商品字段映射及响应校验。
+
+## 关键词搜索（前端已实现，后端待联调）
+
+点击搜索图标或按回车时，先去掉搜索词首尾空格。空输入或仅含空格时，在导航下方显示 Element Plus `ElAlert`，内容为“请输入搜索词”，使用 `type="warning"`、`center` 和 `show-icon`；不发送商品请求、不打开标签页，并聚焦搜索框。输入有效内容后隐藏提示。中文输入法选词的回车不触发搜索。
+
+有效输入在新标签页打开 `/products?keyword=RTK&page=1`。搜索结果页保留搜索栏、隐藏分类栏、显示搜索词和匹配商品总数，每页最多 12 件商品；成功且有结果时显示分页栏，包括只有一页的情况。没有结果时显示“未找到相关商品”，失败时允许重试。编辑或清空搜索框只是修改待提交内容，当前结果仍由 URL 中的搜索词决定；再次提交有效搜索词时打开新标签页。
+
+```http
+GET /api/products/page?keyword=RTK&pageNum=1
+GET /api/products/page?keyword=RTK&pageNum=2
+```
+
+搜索覆盖全部分类，不传 `categoryId`。关键词由 Vue Router 和 Axios 分别负责页面 URL 与请求参数的编码。翻页、刷新、重试和越界页码纠正均保留已提交的关键词。加载时显示 12 张骨架卡片，旧请求不得覆盖最新结果。
+
+本次只实现前端请求与展示，不修改后端。联调要求：后端以商品名称包含关键词进行匹配，先筛选再按销量降序、同销量按商品 ID 升序分页；返回上述分页结构，`total` 为搜索匹配的商品总数。不能用前端过滤本页商品代替后端搜索。搜索页不请求首页最多八条的接口，也不要求新增型号字段。
 
 ## 验证
 
@@ -111,3 +126,5 @@ npm run build
 ```
 
 启动后端与 `npm run dev` 后，访问首页检查商品图片、名称、`¥9.90` 和“0人购买”。接口不足八条时只展示实际返回条数。后端完成分类筛选后，核验五个分类对应的请求参数与返回商品，切回“全部”时不传 `categoryId`，所有请求均不传 `sort`。
+
+搜索联调：空输入、全空格输入均提示且不新增请求；有效输入后检查新标签页 URL、搜索框回显、分类栏隐藏和第一页请求。检查中文及 `+`、`&` 等字符编码，翻页保留关键词，每页最多 12 件；验证单页、末页、无结果、失败重试和越界页码纠正。编辑搜索框后翻页或重试仍使用 URL 中的已提交词；首页输入搜索词后切换分类仍只请求当前分类的八条商品。

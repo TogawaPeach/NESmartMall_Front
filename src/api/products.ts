@@ -183,7 +183,10 @@ export async function queryProductPage(
     throw new ProductContractError('商品页码必须为正整数')
   }
 
-  const params = buildCategoryParams(query.category)
+  const keyword = query.keyword?.trim() ?? ''
+  // Search always covers all categories, even if the caller has a selected category.
+  const params = buildCategoryParams(keyword ? 'all' : query.category)
+  if (keyword) params[productPageContract.keywordParameter] = keyword
   params[productPageContract.pageParameter] = query.pageNum
   const response = await http.get<unknown>(productPageContract.endpoint, {
     params,

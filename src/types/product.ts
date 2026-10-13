@@ -30,6 +30,7 @@ export interface ProductQuery {
 export interface ProductPageQuery {
   category: ProductCategoryKey
   pageNum: number
+  keyword?: string
 }
 
 export interface ProductPageResult {

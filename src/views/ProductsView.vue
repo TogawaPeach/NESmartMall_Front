@@ -15,26 +15,31 @@ const {
   category,
   currentPage,
   keyword,
+  searchKeyword,
+  isSearch,
   products,
   total,
   state,
   errorKind,
   errorMessage,
   selectCategory,
-  search,
   clearSearch,
   retry,
 } = useProductList()
 
 const title = computed(() =>
-  category.value === 'all' ? '全部商品' : productCategoryLabel(category.value),
+  isSearch.value
+    ? `“${searchKeyword.value}”的搜索结果`
+    : category.value === 'all'
+      ? '全部商品'
+      : productCategoryLabel(category.value),
 )
 </script>
 
 <template>
   <div class="storefront product-list">
     <a class="skip-link" href="#product-list">跳转到商品列表</a>
-    <StorefrontHeader v-model:keyword="keyword" @search="search" @clear-search="clearSearch" />
+    <StorefrontHeader v-model:keyword="keyword" @clear-search="clearSearch" />
 
     <main id="product-list" class="catalog" aria-labelledby="catalog-title" tabindex="-1">
       <nav class="breadcrumb" aria-label="当前位置">
@@ -48,7 +53,7 @@ const title = computed(() =>
           共 {{ total }} 件商品
         </p>
       </div>
-      <div class="catalog-heading">
+      <div v-if="!isSearch" class="catalog-heading">
         <ProductCategoryFilter :category="category" @select-category="selectCategory" />
       </div>
 
@@ -58,7 +63,9 @@ const title = computed(() =>
           <template v-else-if="state === 'success'">
             第 {{ currentPage }} 页，已加载 {{ products.length }} 件商品，共 {{ total }} 件
           </template>
-          <template v-else-if="state === 'empty'">暂无商品</template>
+          <template v-else-if="state === 'empty'">
+            {{ isSearch ? '未找到相关商品' : '暂无商品' }}
+          </template>
           <template v-else>商品加载失败，请重试</template>
         </div>
 
@@ -68,25 +75,21 @@ const title = computed(() =>
         </div>
         <div v-else-if="state === 'empty'" class="catalog-state">
           <ElIcon class="state-icon" aria-hidden="true"><Box /></ElIcon>
-          <p class="state-title">暂无商品</p>
-          <p class="state-description">可以切换分类继续浏览</p>
+          <p class="state-title">{{ isSearch ? '未找到相关商品' : '暂无商品' }}</p>
+          <p class="state-description">
+            {{ isSearch ? '试试其他搜索词' : '可以切换分类继续浏览' }}
+          </p>
         </div>
         <div v-else class="catalog-state">
           <ElIcon class="state-icon" aria-hidden="true"><Warning /></ElIcon>
           <p class="state-title">商品加载失败，请重试</p>
           <p v-if="errorKind === 'contract'" class="state-description">{{ errorMessage }}</p>
-          <ElButton
-            class="retry-button"
-            :icon="RefreshRight"
-            @click="errorKind === 'contract' && keyword.trim() ? clearSearch() : retry()"
-          >
-            {{ errorKind === 'contract' && keyword.trim() ? '清空搜索词' : '重试' }}
-          </ElButton>
+          <ElButton class="retry-button" :icon="RefreshRight" @click="retry"> 重试 </ElButton>
         </div>
       </section>
 
       <nav
-        v-if="state === 'success' && total !== null && total > PRODUCT_PAGE_SIZE"
+        v-if="state === 'success' && total !== null && (isSearch || total > PRODUCT_PAGE_SIZE)"
         class="pagination"
         aria-label="商品分页"
       >
@@ -96,7 +99,7 @@ const title = computed(() =>
             :page-size="PRODUCT_PAGE_SIZE"
             :total="total"
             layout="prev, pager, next"
-            hide-on-single-page
+            :hide-on-single-page="!isSearch"
           />
         </ElConfigProvider>
       </nav>
@@ -169,6 +172,7 @@ const title = computed(() =>
   color: var(--store-text);
   font-size: 28px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .product-count {
   margin: 0;
