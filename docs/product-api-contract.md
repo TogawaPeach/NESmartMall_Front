@@ -1,4 +1,6 @@
-# 首页商品接口
+# 商品接口
+
+## 首页商品接口
 
 首页默认停留在“全部”，组件挂载时自动查询销量前八的商品，加载时显示八张骨架卡片：
 
@@ -12,14 +14,14 @@ GET http://localhost:8082/api/products?limit=8
 
 前端不发送 `sort`，统一使用后端默认的销量降序排序。“全部”省略 `categoryId`，其他分类按以下固定映射发送：
 
-| 选项卡 | categoryId |
-| --- | --- |
-| 全部 | 不传 |
-| 全站仪 | 1 |
-| GNSS / RTK | 2 |
-| 水准仪 | 3 |
-| 测距仪 | 4 |
-| 配件 | 5 |
+| 选项卡     | categoryId |
+| ---------- | ---------- |
+| 全部       | 不传       |
+| 全站仪     | 1          |
+| GNSS / RTK | 2          |
+| 水准仪     | 3          |
+| 测距仪     | 4          |
+| 配件       | 5          |
 
 例如选择全站仪时发送 `GET /api/products?categoryId=1&limit=8`。参数顺序不影响请求含义。切回“全部”重新查询并省略分类参数。每次分类查询和重试均最多展示八条结果，等待响应期间显示八张骨架卡片。
 
@@ -57,6 +59,50 @@ GET http://localhost:8082/api/products?limit=8
 只有业务成功且 `data: []` 时显示空列表。网络失败、超时、业务失败、列表非数组、重复商品 ID、字段类型异常均显示失败提示。首页不填充演示商品。
 
 关键词参数尚未确认，对应配置保留 `null`；触发关键词搜索时在发送请求前显示暂未开放提示，清空搜索词即可恢复分类查询。
+
+## 商品列表分页接口（后端待实现）
+
+首页点击“查看全部商品”或“查看全部 + 分类名称”后，在新标签页打开商品列表页。该页使用独立分页接口，首页现有 `/api/products?limit=8` 请求和数组响应保持不变。
+
+前端已按以下约定准备查询；当前后端分页实现尚未完成。默认路径为 `/api/products/page`，可通过 `VITE_PRODUCT_PAGE_ENDPOINT` 覆盖。示例请求：
+
+```http
+GET /api/products/page?pageNum=1
+GET /api/products/page?categoryId=1&pageNum=2
+```
+
+`pageNum` 从 1 开始，必须为正安全整数。分类 ID 使用上述固定映射，“全部”省略 `categoryId`。前端不发送 `pageSize`、`limit`、`sort` 或关键词；后端固定每页最多 12 件商品，并使用默认排序。切换分类从第 1 页查询。
+
+后端分页响应需同时返回本页商品和当前分类下的商品总数，例如：
+
+```json
+{
+  "code": 200,
+  "message": "OK",
+  "data": {
+    "list": [
+      {
+        "coverUrl": "https://example.com/product.webp",
+        "id": 1,
+        "name": "商品名称",
+        "price": 990,
+        "sales": 0
+      }
+    ],
+    "total": 1,
+    "pageNum": 1,
+    "pageSize": 12
+  }
+}
+```
+
+商品字段、价格单位及 `code: 200` 成功约定与首页一致。`total` 必须是非负安全整数，表示筛选后的全部商品数量；`pageNum` 必须与请求页码一致，`pageSize` 必须为 12，`list` 长度不得超过 12，页内商品 ID 不得重复。前端不通过本页条数估算总数，也不在接口失败时填充演示数据。
+
+后端使用 PageHelper 时，应关闭自动把越界页码调整至首尾页的行为：请求超出最后一页时，仍返回请求的 `pageNum`、实际 `total`、`pageSize: 12` 和 `list: []`。前端据此计算最后一页并重新查询。这样 URL 页码、分页组件和实际商品保持一致。
+
+Element Plus 分页组件固定 `page-size="12"`，使用 `layout="prev, pager, next"`，不提供每页条数选择器。分页组件的 `total` 直接使用后端响应；例如当前分类有 50 件商品，共 5 页，最后一页 2 件。后端未实现、网络失败、业务失败或分页字段不符合约定时，列表页显示失败状态并允许重试。
+
+分页相关适配入口为 `src/api/products.ts` 的 `queryProductPage({ category, pageNum })`；固定页大小为导出的 `PRODUCT_PAGE_SIZE`。`src/api/productContract.ts` 中的 `productPageContract` 配置路径和分页字段映射，复用首页商品字段映射及响应校验。
 
 ## 验证
 

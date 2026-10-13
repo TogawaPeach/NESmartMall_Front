@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElButton, ElIcon, ElTooltip } from 'element-plus'
 import { ArrowRight, Box, RefreshRight, Warning } from '@element-plus/icons-vue'
 import StorefrontHeader from '@/components/storefront/StorefrontHeader.vue'
@@ -8,8 +7,8 @@ import ProductCategoryFilter from '@/components/storefront/ProductCategoryFilter
 import ProductCard from '@/components/storefront/ProductCard.vue'
 import ProductGridSkeleton from '@/components/storefront/ProductGridSkeleton.vue'
 import { useHomeProducts } from '@/composables/useHomeProducts'
+import { productCategoryLabel, productListLocation } from '@/constants/productCategories'
 
-const router = useRouter()
 const {
   category,
   keyword,
@@ -22,11 +21,9 @@ const {
   clearSearch,
   retry,
 } = useHomeProducts()
-const hasProductList = computed(() => router.hasRoute('products'))
-
-function viewAll() {
-  if (hasProductList.value) void router.push({ name: 'products' })
-}
+const viewAllLabel = computed(() =>
+  category.value === 'all' ? '查看全部商品' : `查看全部${productCategoryLabel(category.value)}`,
+)
 </script>
 
 <template>
@@ -38,20 +35,17 @@ function viewAll() {
       <div class="catalog-heading">
         <h1 id="catalog-title" class="sr-only">商品分类</h1>
         <ProductCategoryFilter :category="category" @select-category="selectCategory" />
-        <ElTooltip
-          :content="hasProductList ? '查看全部商品' : '查看全部 · 暂未开放'"
-          :trigger="['hover', 'focus']"
-        >
-          <ElButton
-            text
+        <ElTooltip content="在新标签页中查看" :trigger="['hover', 'focus']">
+          <RouterLink
             class="view-all"
-            :aria-disabled="!hasProductList"
-            :aria-label="hasProductList ? '查看全部商品' : '查看全部商品，暂未开放'"
-            @click="viewAll"
+            :to="productListLocation(category)"
+            target="_blank"
+            rel="noopener noreferrer"
+            :aria-label="`${viewAllLabel}（在新标签页中打开）`"
           >
-            <span>查看全部</span>
+            <span>{{ viewAllLabel }}</span>
             <ElIcon aria-hidden="true"><ArrowRight /></ElIcon>
-          </ElButton>
+          </RouterLink>
         </ElTooltip>
       </div>
 
@@ -121,7 +115,7 @@ function viewAll() {
   padding: 0 var(--store-module-inset);
 }
 
-.view-all.el-button {
+.view-all {
   display: inline-flex;
   flex-shrink: 0;
   gap: 8px;
@@ -130,15 +124,18 @@ function viewAll() {
   color: var(--store-text);
   font-size: 18px;
   font-weight: 500;
+  text-decoration: none;
 }
 
-.view-all.el-button:not(.is-disabled):hover {
+.view-all:hover {
   background: transparent;
   color: #536b7a;
 }
 
-.view-all[aria-disabled='true'] {
-  cursor: not-allowed;
+.view-all:focus-visible {
+  outline: 2px solid #899ca9;
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 
 .catalog-content {
@@ -255,7 +252,7 @@ function viewAll() {
     flex-basis: 100%;
   }
 
-  .view-all.el-button {
+  .view-all {
     margin-left: auto;
     gap: 3px;
     height: 36px;

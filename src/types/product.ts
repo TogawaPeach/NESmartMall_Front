@@ -27,5 +27,17 @@ export interface ProductQuery {
   limit: number
 }
 
+export interface ProductPageQuery {
+  category: ProductCategoryKey
+  pageNum: number
+}
+
+export interface ProductPageResult {
+  list: Product[]
+  total: number
+  pageNum: number
+  pageSize: 12
+}
+
 export type ProductLoadState = 'loading' | 'success' | 'empty' | 'error'
 export type ProductErrorKind = 'contract' | 'request' | 'response' | null

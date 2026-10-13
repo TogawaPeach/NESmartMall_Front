@@ -1,12 +1,23 @@
-import type { CoreParameter, Product, ProductQuery } from '@/types/product'
+import type {
+  CoreParameter,
+  Product,
+  ProductCategoryKey,
+  ProductPageQuery,
+  ProductPageResult,
+  ProductQuery,
+} from '@/types/product'
 import { http } from './http'
 import {
   productContract,
+  productPageContract,
+  PRODUCT_PAGE_SIZE,
   ProductContractError,
   ProductResponseError,
   validateProductContract,
   type FieldPath,
 } from './productContract'
+
+export { PRODUCT_PAGE_SIZE } from './productContract'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -98,22 +109,28 @@ function mapProduct(source: unknown): Product {
   }
 }
 
-function buildParams(query: ProductQuery): Record<string, string | number> {
+function buildCategoryParams(categoryKey: ProductCategoryKey): Record<string, string | number> {
   const config = productContract.query
   const params: Record<string, string | number> = {}
   if (
-    query.category !== 'all' &&
-    (!config.categoryParameter || productContract.categoryValues[query.category] === null)
+    categoryKey !== 'all' &&
+    (!config.categoryParameter || productContract.categoryValues[categoryKey] === null)
   ) {
     throw new ProductContractError('分类查询暂未开放，请选择“全部”')
   }
   const category =
-    query.category === 'all'
+    categoryKey === 'all'
       ? config.allCategory.mode === 'value'
         ? config.allCategory.value
         : null
-      : productContract.categoryValues[query.category]
+      : productContract.categoryValues[categoryKey]
   if (category !== null) params[config.categoryParameter!] = category
+  return params
+}
+
+function buildParams(query: ProductQuery): Record<string, string | number> {
+  const config = productContract.query
+  const params = buildCategoryParams(query.category)
   const keyword = query.keyword.trim()
   if (keyword && !config.keywordParameter) {
     throw new ProductContractError('关键词搜索暂未开放，请清空搜索词')
@@ -121,6 +138,24 @@ function buildParams(query: ProductQuery): Record<string, string | number> {
   if (keyword || config.sendEmptyKeyword) params[config.keywordParameter!] = keyword
   if (config.limit.enabled) params[config.limit.parameter!] = query.limit
   return params
+}
+
+function validateBusinessStatus(response: unknown): void {
+  const status = productContract.response.businessStatus
+  if (status.mode === 'field') {
+    const actual = readPath(response, status.path)
+    if (!status.successValues?.some((expected) => actual === expected)) {
+      throw new ProductResponseError('商品接口返回业务失败状态')
+    }
+  }
+}
+
+function mapProductList(list: unknown): Product[] {
+  if (!Array.isArray(list)) throw new ProductResponseError('商品列表字段不是数组')
+  const products = list.map(mapProduct)
+  const ids = new Set(products.map((product) => `${typeof product.id}:${product.id}`))
+  if (ids.size !== products.length) throw new ProductResponseError('商品标识重复')
+  return products
 }
 
 export async function queryProducts(
@@ -133,18 +168,55 @@ export async function queryProducts(
     params: buildParams(query),
     signal: options.signal,
   })
-  const status = productContract.response.businessStatus
-  if (status.mode === 'field') {
-    const actual = readPath(response.data, status.path)
-    if (!status.successValues?.some((expected) => actual === expected)) {
-      throw new ProductResponseError('商品接口返回业务失败状态')
-    }
+  validateBusinessStatus(response.data)
+  const list = readPath(response.data, productContract.response.listPath)
+  const products = mapProductList(list)
+  return products.slice(0, query.limit)
+}
+
+export async function queryProductPage(
+  query: ProductPageQuery,
+  options: { signal?: AbortSignal } = {},
+): Promise<ProductPageResult> {
+  validateProductContract()
+  if (!Number.isSafeInteger(query.pageNum) || query.pageNum < 1) {
+    throw new ProductContractError('商品页码必须为正整数')
   }
 
-  const list = readPath(response.data, productContract.response.listPath)
+  const params = buildCategoryParams(query.category)
+  params[productPageContract.pageParameter] = query.pageNum
+  const response = await http.get<unknown>(productPageContract.endpoint, {
+    params,
+    signal: options.signal,
+  })
+  validateBusinessStatus(response.data)
+
+  const paths = productPageContract.response
+  const total = readPath(response.data, paths.totalPath)
+  const pageNum = readPath(response.data, paths.pageNumPath)
+  const pageSize = readPath(response.data, paths.pageSizePath)
+  if (typeof total !== 'number' || !Number.isSafeInteger(total) || total < 0) {
+    throw new ProductResponseError('商品总数字段异常')
+  }
+  if (
+    typeof pageNum !== 'number' ||
+    !Number.isSafeInteger(pageNum) ||
+    pageNum < 1 ||
+    pageNum !== query.pageNum
+  ) {
+    throw new ProductResponseError('商品页码字段与请求不一致')
+  }
+  if (pageSize !== PRODUCT_PAGE_SIZE) {
+    throw new ProductResponseError('商品接口每页数量必须为 12')
+  }
+
+  const list = readPath(response.data, paths.listPath)
   if (!Array.isArray(list)) throw new ProductResponseError('商品列表字段不是数组')
-  const products = list.map(mapProduct)
-  const ids = new Set(products.map((product) => `${typeof product.id}:${product.id}`))
-  if (ids.size !== products.length) throw new ProductResponseError('商品标识重复')
-  return products.slice(0, query.limit)
+  if (list.length > PRODUCT_PAGE_SIZE) {
+    throw new ProductResponseError('商品接口单页返回数量超过 12')
+  }
+  if (list.length > total) {
+    throw new ProductResponseError('商品总数小于本页商品数量')
+  }
+  return { list: mapProductList(list), total, pageNum, pageSize }
 }

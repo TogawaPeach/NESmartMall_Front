@@ -87,6 +87,21 @@ export const productContract: ProductContract = {
   priceUnit: 'fen',
 }
 
+/** The catalogue always uses twelve products per page, enforced by the backend. */
+export const PRODUCT_PAGE_SIZE = 12
+
+/** Frontend pagination contract; the backend endpoint is pending implementation. */
+export const productPageContract = {
+  endpoint: import.meta.env.VITE_PRODUCT_PAGE_ENDPOINT?.trim() || '/api/products/page',
+  pageParameter: 'pageNum',
+  response: {
+    listPath: ['data', 'list'],
+    totalPath: ['data', 'total'],
+    pageNumPath: ['data', 'pageNum'],
+    pageSizePath: ['data', 'pageSize'],
+  },
+} as const
+
 export class ProductContractError extends Error {
   constructor(message = '商品接口契约尚未配置') {
     super(message)

@@ -6,7 +6,11 @@
 
 开发服务将 `/api` 代理到 `http://localhost:8082`，默认请求 `/api/products?limit=8`，前端省略 `sort`，由后端默认按销量降序排列。部署地址可通过 `.env.example` 中的环境变量配置；参数、响应字段及价格单位集中在 `src/api/productContract.ts`。详情见 [商品接口契约](docs/product-api-contract.md)。
 
-首页组件位于 `src/components/storefront/`，页面位于 `src/views/HomeView.vue`，查询状态位于 `src/composables/useHomeProducts.ts`。订单、购物车、用户入口及查看全部在对应路由未实现时禁用。
+首页组件位于 `src/components/storefront/`，页面位于 `src/views/HomeView.vue`，查询状态位于 `src/composables/useHomeProducts.ts`。订单、购物车及用户入口在对应路由未实现时禁用。
+
+“查看全部”文字随当前分类变化，点击后在新标签页打开 `/products` 并保留分类。列表页沿用首页商品卡片，固定每页 12 件，使用 Element Plus 的上一页、页码及下一页控件，不提供每页数量选择。分类与页码写入 URL，支持刷新、直接访问和浏览器前进/后退；切换分类回到第 1 页。加载、空列表、失败和重试状态均已接入。
+
+列表页使用独立分页接口 `/api/products/page`（可通过 `VITE_PRODUCT_PAGE_ENDPOINT` 覆盖），一次返回本页商品及当前分类的总数。后端分页接口待实现，返回结构与越界页处理见 [商品接口契约](docs/product-api-contract.md)；首页继续使用原来的八条数组接口。
 
 Docker + Nginx 部署与公网 IPv4:8080 访问步骤见 [服务器部署](docs/deployment.md)，Nginx 配置位于 `deploy/nginx.conf`。
 
