@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { http } from './http'
-import type { AuthUser, LoginCredentials, LoginData } from '@/types/auth'
+import type { AuthUser, LoginCredentials, LoginData, RegisterCredentials } from '@/types/auth'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -23,6 +23,42 @@ function businessMessage(value: unknown, fallback: string): string {
   return isRecord(value) && typeof value.message === 'string' && value.message.trim()
     ? value.message
     : fallback
+}
+
+export async function register(
+  credentials: RegisterCredentials,
+  options: { signal?: AbortSignal } = {},
+): Promise<void> {
+  const account = credentials.account.trim()
+  const nickname = credentials.nickname.trim()
+  if (!/^1[3-9]\d{9}$/.test(account)) throw new Error('请输入有效的11位手机号')
+  if (!nickname || nickname.length > 64) throw new Error('昵称须为1至64个字符')
+  if (!credentials.password.trim()) throw new Error('请输入密码')
+  if (credentials.role !== 0 && credentials.role !== 1) throw new Error('请选择用户或商家')
+
+  let payload: unknown
+  try {
+    const response = await http.post<unknown>(
+      '/api/auth/register',
+      { account, nickname, password: credentials.password, role: credentials.role },
+      { signal: options.signal },
+    )
+    payload = response.data
+  } catch (error) {
+    if (axios.isCancel(error)) throw error
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        throw new Error(businessMessage(error.response.data, '注册失败，请稍后重试'))
+      }
+      throw new Error(
+        error.code === 'ECONNABORTED' ? '注册请求超时，请重试' : '无法连接服务器，请稍后重试',
+      )
+    }
+    throw error
+  }
+  if (!isRecord(payload) || payload.code !== 200) {
+    throw new Error(businessMessage(payload, '注册失败，请稍后重试'))
+  }
 }
 
 export async function login(

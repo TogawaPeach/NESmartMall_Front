@@ -21,7 +21,7 @@ interface AuthState {
 let requestInterceptor: number | undefined
 let responseInterceptor: number | undefined
 
-function backendRequest(config: AxiosRequestConfig): { isLogin: boolean } | null {
+function backendRequest(config: AxiosRequestConfig): { isAuthEntry: boolean } | null {
   try {
     const pageURL = window.location.href
     // Use Axios's URL joining rules, including per-request baseURL overrides.
@@ -39,15 +39,16 @@ function backendRequest(config: AxiosRequestConfig): { isLogin: boolean } | null
     })
     if (!trusted) return null
 
-    const loginURLs = [new URL('/api/auth/login', pageURL)]
-    if (apiBaseURL) {
-      loginURLs.push(new URL(http.getUri({ baseURL: apiBaseURL, url: '/api/auth/login' }), pageURL))
+    const authURLs = []
+    for (const url of ['/api/auth/login', '/api/auth/register']) {
+      authURLs.push(new URL(url, pageURL))
+      if (apiBaseURL) authURLs.push(new URL(http.getUri({ baseURL: apiBaseURL, url }), pageURL))
     }
     return {
-      isLogin:
+      isAuthEntry:
         config.method?.toLowerCase() === 'post' &&
-        loginURLs.some(
-          (login) => target.origin === login.origin && target.pathname === login.pathname,
+        authURLs.some(
+          (entry) => target.origin === entry.origin && target.pathname === entry.pathname,
         ),
     }
   } catch {
@@ -68,7 +69,7 @@ export function configureAuth(auth: AuthState) {
   if (responseInterceptor !== undefined) http.interceptors.response.eject(responseInterceptor)
   const requests = new WeakMap<
     InternalAxiosRequestConfig,
-    { authorization: string | null; isLogin: boolean }
+    { authorization: string | null; isAuthEntry: boolean }
   >()
   requestInterceptor = http.interceptors.request.use((config) => {
     const backend = backendRequest(config)
@@ -76,7 +77,7 @@ export function configureAuth(auth: AuthState) {
     // This layer owns Authorization; discard stale/default/manual headers too.
     config.headers.delete('Authorization')
     if (authorization) config.headers.set('Authorization', authorization)
-    requests.set(config, { authorization, isLogin: backend?.isLogin ?? false })
+    requests.set(config, { authorization, isAuthEntry: backend?.isAuthEntry ?? false })
     return config
   })
 
@@ -84,7 +85,7 @@ export function configureAuth(auth: AuthState) {
     const request = config && requests.get(config)
     if (
       request?.authorization &&
-      !request.isLogin &&
+      !request.isAuthEntry &&
       request.authorization === auth.getAuthorization()
     ) {
       auth.logout()

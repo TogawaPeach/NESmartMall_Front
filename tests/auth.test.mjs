@@ -4,7 +4,7 @@ import { createServer } from 'vite'
 import { AxiosError } from 'axios'
 
 let server, gatewayServer, http, gatewayHttp, login, useAuthStore, createPinia, configureAuth, store
-let queryProducts, queryProductPage
+let queryProducts, queryProductPage, register
 const pageURL = 'https://mall.example.test/products?pageNum=2'
 const gatewayBaseURL = 'https://gateway.example.test/mall'
 const entries = new Map()
@@ -53,7 +53,7 @@ before(async () => {
     appType: 'custom',
   })
   ;({ http, configureAuth } = await server.ssrLoadModule('/src/api/http.ts'))
-  ;({ login } = await server.ssrLoadModule('/src/api/auth.ts'))
+  ;({ login, register } = await server.ssrLoadModule('/src/api/auth.ts'))
   ;({ queryProducts, queryProductPage } = await server.ssrLoadModule('/src/api/products.ts'))
   ;({ useAuthStore } = await server.ssrLoadModule('/src/stores/auth.ts'))
   ;({ createPinia } = await server.ssrLoadModule('pinia'))
@@ -453,6 +453,99 @@ test('login sends JSON credentials in the POST body without changing the passwor
   const data = await login({ account: ' 15130097995 ', password: ' user ' })
   assert.equal(data.user.nickname, 'user')
   assert.equal(data.accessToken, 'test-access-token')
+})
+
+for (const role of [1, 0]) {
+  test(`registration submits only the agreed fields with numeric role ${role} and keeps the user signed out`, async () => {
+    http.defaults.adapter = async (config) => {
+      assert.equal(config.method, 'post')
+      assert.equal(config.url, '/api/auth/register')
+      assert.equal(config.params, undefined)
+      assert.deepEqual(JSON.parse(config.data), {
+        account: '13800138000',
+        nickname: '测绘小助手',
+        password: ' password ',
+        role,
+      })
+      return adapter({ code: 200, message: '注册成功', data: null })(config)
+    }
+    await register({
+      account: ' 13800138000 ',
+      nickname: ' 测绘小助手 ',
+      password: ' password ',
+      role,
+      status: 0,
+    })
+    assert.equal(store.isAuthenticated, false)
+    assert.equal(entries.has(sessionKey), false)
+  })
+}
+
+test('invalid registration fields never reach the backend', async () => {
+  let calls = 0
+  http.defaults.adapter = async (config) => {
+    calls++
+    return adapter({ code: 200, data: null })(config)
+  }
+  const valid = { account: '13800138000', nickname: '测试昵称', password: 'secret', role: 1 }
+  for (const change of [
+    { account: '' },
+    { account: '1380013800' },
+    { account: 'not-a-phone' },
+    { nickname: ' ' },
+    { nickname: '字'.repeat(65) },
+    { password: '' },
+    { password: '   ' },
+    { role: 2 },
+    { role: '1' },
+  ])
+    await assert.rejects(register({ ...valid, ...change }))
+  assert.equal(calls, 0)
+})
+
+test('registration displays duplicate-account business and HTTP errors', async () => {
+  const credentials = { account: '13800138000', nickname: '测试昵称', password: 'secret', role: 1 }
+  http.defaults.adapter = adapter({ code: 409, message: '该手机号已注册', data: null })
+  await assert.rejects(register(credentials), /该手机号已注册/)
+  http.defaults.adapter = async (config) => {
+    throw new AxiosError('Conflict', 'ERR_BAD_REQUEST', config, undefined, {
+      ...(await adapter({ code: 409, message: '该手机号已注册', data: null }, 409)(config)),
+    })
+  }
+  await assert.rejects(register(credentials), /该手机号已注册/)
+})
+
+test('registration rejects malformed success and reports network errors', async () => {
+  const credentials = { account: '13800138000', nickname: '测试昵称', password: 'secret', role: 1 }
+  for (const payload of [null, {}, { code: '200' }]) {
+    http.defaults.adapter = adapter(payload)
+    await assert.rejects(register(credentials), /注册失败/)
+  }
+  http.defaults.adapter = async (config) => {
+    throw new AxiosError('timeout', 'ECONNABORTED', config)
+  }
+  await assert.rejects(register(credentials), /请求超时/)
+})
+
+test('a failed registration cannot clear an existing login', async () => {
+  await signIn()
+  http.defaults.adapter = adapter({ code: 401, message: '注册失败', data: null })
+  await assert.rejects(
+    register({ account: '13800138000', nickname: '测试昵称', password: 'secret', role: 1 }),
+  )
+  assert.equal(store.isAuthenticated, true)
+})
+
+test('cancelled registration remains cancelled', async () => {
+  const controller = new AbortController()
+  controller.abort()
+  await assert.rejects(
+    register(
+      { account: '13800138000', nickname: '测试昵称', password: 'secret', role: 1 },
+      { signal: controller.signal },
+    ),
+    { code: 'ERR_CANCELED' },
+  )
 })
 
 test('business failure never creates a logged-in session', async () => {

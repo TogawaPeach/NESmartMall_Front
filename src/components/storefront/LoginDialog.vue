@@ -1,33 +1,97 @@
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { ElAlert, ElButton, ElDialog, ElForm, ElFormItem, ElInput } from 'element-plus'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import {
+  ElAlert,
+  ElButton,
+  ElDialog,
+  ElForm,
+  ElFormItem,
+  ElInput,
+  ElRadio,
+  ElRadioGroup,
+} from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { Lock, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+import { register } from '@/api/auth'
+import type { RegisterCredentials } from '@/types/auth'
 
 const visible = defineModel<boolean>({ required: true })
 defineProps<{ description?: string }>()
 const auth = useAuthStore()
-const form = reactive({ account: '', password: '' })
+const mode = ref<'login' | 'register'>('login')
+const isRegister = computed(() => mode.value === 'register')
+const form = reactive<RegisterCredentials>({ account: '', nickname: '', password: '', role: 1 })
 const formRef = ref<FormInstance>()
 const accountInput = ref<InstanceType<typeof ElInput>>()
 const submitting = ref(false)
 const errorMessage = ref('')
+const successMessage = ref('')
 let controller: AbortController | undefined
 let loginTrigger: HTMLElement | null = null
+let revision = 0
 
 const rules: FormRules = {
   account: [{ required: true, whitespace: true, message: '请输入账号', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
+const registrationRules: FormRules = {
+  account: [
+    {
+      validator: (_rule, value, callback) => {
+        callback(
+          /^1[3-9]\d{9}$/.test(String(value).trim())
+            ? undefined
+            : new Error('请输入有效的11位手机号'),
+        )
+      },
+      required: true,
+      trigger: 'blur',
+    },
+  ],
+  nickname: [
+    {
+      validator: (_rule, value, callback) => {
+        const nickname = String(value).trim()
+        callback(nickname && nickname.length <= 64 ? undefined : new Error('昵称须为1至64个字符'))
+      },
+      required: true,
+      trigger: 'blur',
+    },
+  ],
+  password: [{ required: true, whitespace: true, message: '请输入密码', trigger: 'blur' }],
+  role: [{ required: true, type: 'number', message: '请选择账户类型', trigger: 'change' }],
+}
+
+function clearMessages() {
+  errorMessage.value = ''
+  successMessage.value = ''
+}
+
+async function switchMode() {
+  if (submitting.value) return
+  revision++
+  mode.value = isRegister.value ? 'login' : 'register'
+  form.password = ''
+  form.nickname = ''
+  form.role = 1
+  clearMessages()
+  await nextTick()
+  formRef.value?.clearValidate()
+  focusAccount()
+}
 
 function reset() {
+  revision++
   controller?.abort()
   controller = undefined
   submitting.value = false
+  mode.value = 'login'
   form.account = ''
+  form.nickname = ''
   form.password = ''
-  errorMessage.value = ''
+  form.role = 1
+  clearMessages()
   formRef.value?.clearValidate()
 }
 
@@ -55,27 +119,48 @@ function focusAccount() {
 
 async function submit() {
   if (submitting.value) return
+  const requestRevision = revision
+  const registering = isRegister.value
   const valid = await formRef.value?.validate().catch(() => false)
-  if (!valid || !visible.value || submitting.value) return
+  if (!valid || !visible.value || submitting.value || requestRevision !== revision) return
   const request = new AbortController()
   controller = request
   submitting.value = true
-  errorMessage.value = ''
+  clearMessages()
   try {
-    const signedIn = await auth.signIn(
-      { account: form.account, password: form.password },
-      { signal: request.signal },
-    )
-    if (signedIn && !request.signal.aborted) visible.value = false
+    if (registering) {
+      const account = form.account.trim()
+      await register({ ...form }, { signal: request.signal })
+      if (request.signal.aborted || controller !== request) return
+      mode.value = 'login'
+      form.account = account
+      form.nickname = ''
+      form.password = ''
+      form.role = 1
+      successMessage.value = '注册成功，请登录'
+      await nextTick()
+      formRef.value?.clearValidate()
+    } else {
+      const signedIn = await auth.signIn(
+        { account: form.account, password: form.password },
+        { signal: request.signal },
+      )
+      if (signedIn && !request.signal.aborted) visible.value = false
+    }
   } catch (error) {
     if (!request.signal.aborted) {
-      errorMessage.value = error instanceof Error ? error.message : '登录失败，请稍后重试'
+      errorMessage.value =
+        error instanceof Error ? error.message : `${registering ? '注册' : '登录'}失败，请稍后重试`
       form.password = ''
     }
   } finally {
     if (controller === request) {
       submitting.value = false
       controller = undefined
+      if (registering && successMessage.value) {
+        await nextTick()
+        if (visible.value) focusAccount()
+      }
     }
   }
 }
@@ -85,7 +170,8 @@ async function submit() {
   <ElDialog
     v-model="visible"
     class="store-login-dialog"
-    title="登录经纬智选"
+    :class="{ 'is-register': isRegister }"
+    :title="isRegister ? '注册经纬智选' : '登录经纬智选'"
     width="420px"
     align-center
     append-to-body
@@ -95,25 +181,45 @@ async function submit() {
     @close="reset"
     @closed="restoreFocus"
   >
-    <p class="login-description">{{ description || '登录后，继续你的选购之旅' }}</p>
+    <p class="login-description">
+      {{ isRegister ? '创建账号，开启你的选购之旅' : description || '登录后，继续你的选购之旅' }}
+    </p>
     <ElForm
       ref="formRef"
       :model="form"
-      :rules="rules"
+      :rules="isRegister ? registrationRules : rules"
+      :validate-on-rule-change="false"
       label-position="top"
       @submit.prevent="submit"
     >
-      <ElFormItem label="账号" prop="account" for="login-account">
+      <ElFormItem
+        :label="isRegister ? '账号（手机号）' : '账号'"
+        prop="account"
+        for="login-account"
+      >
         <ElInput
           id="login-account"
           ref="accountInput"
           v-model="form.account"
           name="username"
           autocomplete="username"
-          placeholder="请输入账号"
+          :placeholder="isRegister ? '请输入11位手机号' : '请输入账号'"
+          :inputmode="isRegister ? 'tel' : 'text'"
           :prefix-icon="User"
           :disabled="submitting"
-          @input="errorMessage = ''"
+          @input="clearMessages"
+        />
+      </ElFormItem>
+      <ElFormItem v-if="isRegister" label="昵称" prop="nickname" for="register-nickname">
+        <ElInput
+          id="register-nickname"
+          v-model="form.nickname"
+          name="nickname"
+          autocomplete="nickname"
+          :placeholder="form.role === 0 ? '请输入昵称（作为店铺名）' : '请输入昵称'"
+          :prefix-icon="User"
+          :disabled="submitting"
+          @input="clearMessages"
         />
       </ElFormItem>
       <ElFormItem label="密码" prop="password" for="login-password">
@@ -122,14 +228,33 @@ async function submit() {
           v-model="form.password"
           name="password"
           type="password"
-          autocomplete="current-password"
+          :autocomplete="isRegister ? 'new-password' : 'current-password'"
           placeholder="请输入密码"
           show-password
           :prefix-icon="Lock"
           :disabled="submitting"
-          @input="errorMessage = ''"
+          @input="clearMessages"
         />
       </ElFormItem>
+      <ElFormItem v-if="isRegister" label="账户类型" prop="role">
+        <ElRadioGroup
+          v-model="form.role"
+          aria-label="账户类型"
+          :disabled="submitting"
+          @change="clearMessages"
+        >
+          <ElRadio :value="1">用户</ElRadio>
+          <ElRadio :value="0">商家</ElRadio>
+        </ElRadioGroup>
+      </ElFormItem>
+      <ElAlert
+        v-if="successMessage"
+        :title="successMessage"
+        type="success"
+        show-icon
+        :closable="false"
+        class="login-error"
+      />
       <ElAlert
         v-if="errorMessage"
         :title="errorMessage"
@@ -139,10 +264,22 @@ async function submit() {
         class="login-error"
       />
       <ElButton class="login-submit" type="primary" native-type="submit" :loading="submitting">
-        {{ submitting ? '正在登录…' : '登录' }}
+        {{ isRegister ? (submitting ? '正在注册…' : '注册') : submitting ? '正在登录…' : '登录' }}
+      </ElButton>
+      <ElButton
+        class="login-switch"
+        type="primary"
+        plain
+        native-type="button"
+        :disabled="submitting"
+        @click="switchMode"
+      >
+        {{ isRegister ? '返回登录' : '注册' }}
       </ElButton>
     </ElForm>
-    <p class="login-note">登录成功后将继续停留在当前页面</p>
+    <p class="login-note">
+      {{ isRegister ? '注册成功后，请使用手机号和密码登录' : '登录成功后将继续停留在当前页面' }}
+    </p>
   </ElDialog>
 </template>
 
@@ -192,11 +329,27 @@ async function submit() {
   margin-bottom: 20px;
 }
 
-.store-login-dialog .login-submit {
+.store-login-dialog .login-submit,
+.store-login-dialog .login-switch {
   width: 100%;
   height: 46px;
   border-radius: 12px;
   font-size: 16px;
+}
+
+.store-login-dialog .login-switch {
+  margin: 12px 0 0;
+  border-color: var(--el-color-primary);
+  background: transparent;
+  color: var(--el-color-primary);
+}
+
+.store-login-dialog .login-switch:hover:not(:disabled) {
+  background: var(--el-color-primary-light-9);
+}
+
+.store-login-dialog.is-register .el-form-item {
+  margin-bottom: 20px;
 }
 
 .store-login-dialog .login-note {

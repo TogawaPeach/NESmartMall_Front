@@ -3,6 +3,11 @@ export interface LoginCredentials {
   password: string
 }
 
+export interface RegisterCredentials extends LoginCredentials {
+  nickname: string
+  role: 0 | 1
+}
+
 export interface AuthUser {
   id: string
   account: string
