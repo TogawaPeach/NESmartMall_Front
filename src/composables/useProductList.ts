@@ -14,6 +14,7 @@ import type {
   ProductErrorKind,
   ProductLoadState,
 } from '@/types/product'
+import { useAuthStore } from '@/stores/auth'
 
 function parsePage(value: unknown): number {
   if (typeof value !== 'string' || !/^\d+$/.test(value)) return 1
@@ -22,6 +23,7 @@ function parsePage(value: unknown): number {
 }
 
 export function useProductList() {
+  const auth = useAuthStore()
   const route = useRoute()
   const router = useRouter()
   const searchKeyword = computed(() =>
@@ -63,6 +65,11 @@ export function useProductList() {
     errorKind.value = null
     errorMessage.value = ''
     products.value = []
+    if (!auth.getAuthorization()) {
+      state.value = 'login-required'
+      total.value = null
+      return
+    }
 
     try {
       const result = await queryProductPage(
@@ -85,6 +92,14 @@ export function useProductList() {
         requestController.signal.aborted ||
         axios.isCancel(error)
       ) {
+        return
+      }
+      if (
+        !auth.getAuthorization() ||
+        (axios.isAxiosError(error) && error.response?.status === 401)
+      ) {
+        state.value = 'login-required'
+        total.value = null
         return
       }
       errorKind.value =
@@ -134,7 +149,7 @@ export function useProductList() {
   }
 
   watch(
-    () => [route.query.category, route.query.page, route.query.keyword],
+    () => [route.query.category, route.query.page, route.query.keyword, auth.accessToken],
     () => {
       keyword.value = searchKeyword.value
       if (

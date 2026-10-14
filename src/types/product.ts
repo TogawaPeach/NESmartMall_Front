@@ -40,5 +40,5 @@ export interface ProductPageResult {
   pageSize: 12
 }
 
-export type ProductLoadState = 'loading' | 'success' | 'empty' | 'error'
+export type ProductLoadState = 'loading' | 'success' | 'empty' | 'error' | 'login-required'
 export type ProductErrorKind = 'contract' | 'request' | 'response' | null

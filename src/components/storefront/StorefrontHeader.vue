@@ -16,6 +16,8 @@ import jingweiLogo from '@/assets/jingwei-logo.svg'
 import { productSearchLocation } from '@/constants/productCategories'
 import LoginDialog from './LoginDialog.vue'
 import { useAuthStore } from '@/stores/auth'
+import { storeToRefs } from 'pinia'
+import { useLoginPromptStore } from '@/stores/loginPrompt'
 
 const props = defineProps<{
   keyword: string
@@ -30,7 +32,8 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const auth = useAuthStore()
-const showLogin = ref(false)
+const loginPrompt = useLoginPromptStore()
+const { visible: showLogin } = storeToRefs(loginPrompt)
 const searchInput = ref<InstanceType<typeof ElInput>>()
 const showSearchWarning = ref(false)
 
@@ -49,6 +52,7 @@ function search() {
     return
   }
   showSearchWarning.value = false
+  if (!loginPrompt.requireLogin('登录后即可搜索商品')) return
   if (props.searchInPlace) {
     emit('search', keyword)
     return
@@ -74,6 +78,7 @@ function utilityLabel(route: string, label: string) {
 
 function openUtility(route: string) {
   if (router.hasRoute(route)) {
+    if (!loginPrompt.requireLogin('请先登录账号')) return
     void router.push({ name: route })
   }
 }
@@ -176,7 +181,7 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
             class="utility-button"
             aria-label="用户入口 · 登录"
             aria-haspopup="dialog"
-            @click="showLogin = true"
+            @click="loginPrompt.openLogin()"
           >
             <ElIcon aria-hidden="true"><User /></ElIcon>
           </ElButton>
@@ -210,7 +215,7 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
       show-icon
       :closable="false"
     />
-    <LoginDialog v-model="showLogin" />
+    <LoginDialog v-model="showLogin" :description="loginPrompt.reason" />
   </header>
 </template>
 

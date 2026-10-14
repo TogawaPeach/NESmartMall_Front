@@ -8,6 +8,12 @@ import ProductCard from '@/components/storefront/ProductCard.vue'
 import ProductGridSkeleton from '@/components/storefront/ProductGridSkeleton.vue'
 import { useHomeProducts } from '@/composables/useHomeProducts'
 import { productCategoryLabel, productListLocation } from '@/constants/productCategories'
+import { useLoginPromptStore } from '@/stores/loginPrompt'
+
+const loginPrompt = useLoginPromptStore()
+function checkCatalogueAccess(event: MouseEvent) {
+  if (!loginPrompt.requireLogin('登录后即可查看全部商品')) event.preventDefault()
+}
 
 const {
   category,
@@ -40,6 +46,8 @@ const viewAllLocation = computed(() => productListLocation(category.value, 1))
           <RouterLink
             class="view-all"
             :to="viewAllLocation"
+            @click="checkCatalogueAccess"
+            @auxclick="checkCatalogueAccess"
             target="_blank"
             rel="noopener noreferrer"
             :aria-label="`${viewAllLabel}（在新标签页中打开）`"
@@ -79,6 +87,8 @@ const viewAllLocation = computed(() => productListLocation(category.value, 1))
           <RouterLink
             class="view-all view-all-bottom"
             :to="viewAllLocation"
+            @click="checkCatalogueAccess"
+            @auxclick="checkCatalogueAccess"
             target="_blank"
             rel="noopener noreferrer"
             :aria-label="`${viewAllLabel}（在新标签页中打开）`"

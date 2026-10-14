@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { ElButton, ElConfigProvider, ElIcon, ElPagination } from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import { Box, RefreshRight, Warning } from '@element-plus/icons-vue'
+import { Box, RefreshRight, Warning, User } from '@element-plus/icons-vue'
 import StorefrontHeader from '@/components/storefront/StorefrontHeader.vue'
 import ProductCategoryFilter from '@/components/storefront/ProductCategoryFilter.vue'
 import ProductCard from '@/components/storefront/ProductCard.vue'
@@ -10,6 +10,9 @@ import ProductGridSkeleton from '@/components/storefront/ProductGridSkeleton.vue
 import { PRODUCT_PAGE_SIZE } from '@/api/products'
 import { productCategoryLabel } from '@/constants/productCategories'
 import { useProductList } from '@/composables/useProductList'
+import { useLoginPromptStore } from '@/stores/loginPrompt'
+
+const loginPrompt = useLoginPromptStore()
 
 const {
   category,
@@ -72,6 +75,9 @@ const title = computed(() =>
           <template v-else-if="state === 'empty'">
             {{ isSearch ? '未找到相关商品' : '暂无商品' }}
           </template>
+          <template v-else-if="state === 'login-required'"
+            >请先登录账号，登录后即可浏览商品</template
+          >
           <template v-else>商品加载失败，请重试</template>
         </div>
 
@@ -85,6 +91,17 @@ const title = computed(() =>
           <p class="state-description">
             {{ isSearch ? '试试其他搜索词' : '可以切换分类继续浏览' }}
           </p>
+        </div>
+        <div v-else-if="state === 'login-required'" class="catalog-state">
+          <ElIcon class="state-icon" aria-hidden="true"><User /></ElIcon>
+          <p class="state-title">请先登录账号</p>
+          <p class="state-description">登录后即可浏览全部商品和搜索结果</p>
+          <ElButton
+            class="retry-button"
+            :icon="User"
+            @click="loginPrompt.openLogin('登录后即可继续浏览商品')"
+            >立即登录</ElButton
+          >
         </div>
         <div v-else class="catalog-state">
           <ElIcon class="state-icon" aria-hidden="true"><Warning /></ElIcon>

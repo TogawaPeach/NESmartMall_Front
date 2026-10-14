@@ -6,6 +6,7 @@ import { Lock, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
 const visible = defineModel<boolean>({ required: true })
+defineProps<{ description?: string }>()
 const auth = useAuthStore()
 const form = reactive({ account: '', password: '' })
 const formRef = ref<FormInstance>()
@@ -13,6 +14,7 @@ const accountInput = ref<InstanceType<typeof ElInput>>()
 const submitting = ref(false)
 const errorMessage = ref('')
 let controller: AbortController | undefined
+let loginTrigger: HTMLElement | null = null
 
 const rules: FormRules = {
   account: [{ required: true, whitespace: true, message: '请输入账号', trigger: 'blur' }],
@@ -29,8 +31,23 @@ function reset() {
   formRef.value?.clearValidate()
 }
 
-watch(visible, () => reset(), { flush: 'sync' })
+watch(
+  visible,
+  (opened) => {
+    reset()
+    if (opened)
+      loginTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  },
+  { flush: 'sync' },
+)
 onBeforeUnmount(reset)
+
+function restoreFocus() {
+  // A successful catalogue login replaces its login button with the results.
+  if (loginTrigger && !loginTrigger.isConnected) {
+    document.getElementById('product-list')?.focus({ preventScroll: true })
+  }
+}
 
 function focusAccount() {
   accountInput.value?.focus()
@@ -76,8 +93,9 @@ async function submit() {
     :close-on-click-modal="false"
     @opened="focusAccount"
     @close="reset"
+    @closed="restoreFocus"
   >
-    <p class="login-description">登录后，继续你的选购之旅</p>
+    <p class="login-description">{{ description || '登录后，继续你的选购之旅' }}</p>
     <ElForm
       ref="formRef"
       :model="form"
