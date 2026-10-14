@@ -10,9 +10,17 @@
 
 首页组件位于 `src/components/storefront/`，页面位于 `src/views/HomeView.vue`，查询状态位于 `src/composables/useHomeProducts.ts`。订单、购物车在对应路由未实现时禁用。
 
-用户入口打开账号密码登录弹窗，提交 `POST /api/auth/login`，JSON body 为 `{ "account": "账号", "password": "密码" }`。仅当业务 `code` 为 `200` 且返回完整的 `accessToken`、`tokenType: "Bearer"`、`expiresIn` 和用户信息时建立登录状态；登录成功关闭弹窗并留在当前页面。入口保留用户图标，桌面显示昵称，点击可查看昵称、账号和退出登录。登录会话存入当前标签页的 `sessionStorage`，刷新可恢复，关闭标签页后结束；不保存密码。请求自动附带 Bearer token，过期或收到匹配当前 token 的 `401` 时清理会话。退出登录目前清理前端会话，不调用未提供的后端注销接口。注册、找回密码和个人中心尚未接入。
+用户入口打开账号密码登录弹窗，提交 `POST /api/auth/login`，JSON body 为 `{ "account": "账号", "password": "密码" }`。仅当业务 `code` 为 `200` 且返回完整的 `accessToken`、`tokenType: "Bearer"`、`expiresIn` 和用户信息时建立登录状态；登录成功关闭弹窗并留在当前页面。入口保留用户图标，桌面显示昵称，点击可查看昵称、账号和退出登录。登录会话存入同源标签页共享的 `localStorage`，刷新、新标签页及浏览器重新打开时，未过期的会话均可恢复；到期或退出时清理，不保存密码。退出登录目前清理前端会话，不调用未提供的后端注销接口。注册、找回密码和个人中心尚未接入。
 
-完整需求见 [需求总览](docs/requirements/需求.md) 和 [用户入口与登录状态](docs/requirements/用户入口与登录状态需求.md)。`docs/requirements/` 同步保存本地 `NESmartMall_Require` 的 Markdown 文档，用于 GitHub 版本记录；后续更新需求时同步维护。
+共享 `http` 请求层统一处理 Authorization：只要当前会话 token 未过期，首页等公开接口、分页/搜索及登录接口都自动携带 `Authorization: Bearer <accessToken>`；匿名或过期时不携带。范围按 Axios 最终请求地址判断，仅信任同源 `/api` 路径及配置的 `VITE_API_BASE_URL` 的同源同路径前缀（按路径段匹配），支持相对、绝对及协议相对地址；第三方地址、其他路径以及请求临时覆盖到未配置的后端均不携带会话 token。业务组件不拼接认证头，URL 和业务 body 不追加 token 或用户身份。
+
+普通请求的 HTTP 401 或业务 `code: 401` 只在该请求发送的 token 与当前会话一致时清理会话，防止旧请求清除新登录；登录失败的 401 保留原会话，HTTP 403、网络错误和 5xx 也不清会话。过期仍自动清理，旧会话过期不影响正在进行的新登录，主动退出仍阻止迟到登录恢复会话。此处仅完成前端携带和会话处理；网关尚未实现鉴权，公开接口跳过验签、受保护接口验证 token 及可信用户身份转发仍需后续网关实现。
+
+登录、退出及匹配当前 token 的 401 清理通过 `storage` 事件同步到其他同源标签页；请求发送与 401 处理前再次读取共享会话，避免事件延迟导致旧 token 覆盖新登录。旧版 `sessionStorage` 中的有效会话会在首次迁移时保留并清除旧存储；迁移后不再从其他旧标签页恢复已退出的会话。浏览器禁用存储时仍允许当前页面内存登录，但无法保证刷新恢复或跨标签页共享。
+
+本轮实现、69 项回归测试及后续网关边界汇总见 [前端统一令牌与跨标签登录实现交接](docs/requirements/前端统一令牌与跨标签登录实现交接.md)。
+
+完整需求见 [需求总览](docs/requirements/需求.md) 和 [用户入口与登录状态](docs/requirements/用户入口与登录状态需求.md)。本地 `NESmartMall_Require` 保存完整需求及后端交接，`docs/requirements/` 保存本仓库已纳入版本记录的需求快照；前端相关最新实现见本轮交接记录。
 
 “查看全部”文字随当前分类变化，点击后在新标签页打开 `/products` 并保留分类。列表页沿用首页商品卡片，固定每页 12 件，使用 Element Plus 的上一页、页码及下一页控件，不提供每页数量选择。分类与页码写入 URL，支持刷新、直接访问和浏览器前进/后退；切换分类回到第 1 页。加载、空列表、失败和重试状态均已接入。
 
@@ -59,7 +67,7 @@ npm run dev
 npm run build
 ```
 
-### Test Login API and Session Behavior
+### Test API Authorization, Login and Session Behavior
 
 ```sh
 npm test

@@ -1,8 +1,14 @@
-import axios from 'axios'
+import axios, {
+  type AxiosRequestConfig,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig,
+} from 'axios'
+
+const apiBaseURL = import.meta.env.VITE_API_BASE_URL?.trim() || undefined
 
 /** Same-origin by default; Vite proxies /api to localhost:8080 in development. */
 export const http = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL?.trim() || undefined,
+  baseURL: apiBaseURL,
   timeout: 10_000,
   headers: { Accept: 'application/json' },
 })
@@ -15,35 +21,82 @@ interface AuthState {
 let requestInterceptor: number | undefined
 let responseInterceptor: number | undefined
 
+function backendRequest(config: AxiosRequestConfig): { isLogin: boolean } | null {
+  try {
+    const pageURL = window.location.href
+    // Use Axios's URL joining rules, including per-request baseURL overrides.
+    const target = new URL(http.getUri({ ...config, params: undefined }), pageURL)
+    if (!/^https?:$/.test(target.protocol)) return null
+
+    const bases = [new URL('/api', pageURL)]
+    if (apiBaseURL) bases.push(new URL(apiBaseURL, pageURL))
+    const trusted = bases.some((base) => {
+      const path = base.pathname.replace(/\/+$/, '')
+      return (
+        target.origin === base.origin &&
+        (target.pathname === path || target.pathname.startsWith(`${path}/`))
+      )
+    })
+    if (!trusted) return null
+
+    const loginURLs = [new URL('/api/auth/login', pageURL)]
+    if (apiBaseURL) {
+      loginURLs.push(new URL(http.getUri({ baseURL: apiBaseURL, url: '/api/auth/login' }), pageURL))
+    }
+    return {
+      isLogin:
+        config.method?.toLowerCase() === 'post' &&
+        loginURLs.some(
+          (login) => target.origin === login.origin && target.pathname === login.pathname,
+        ),
+    }
+  } catch {
+    // Unresolvable destinations must never receive session credentials.
+    return null
+  }
+}
+
+function isUnauthorizedResponse(response: AxiosResponse<{ code?: unknown }>): boolean {
+  return (
+    response.status === 401 ||
+    (response.status !== 403 && response.status < 500 && response.data?.code === 401)
+  )
+}
+
 export function configureAuth(auth: AuthState) {
   if (requestInterceptor !== undefined) http.interceptors.request.eject(requestInterceptor)
   if (responseInterceptor !== undefined) http.interceptors.response.eject(responseInterceptor)
+  const requests = new WeakMap<
+    InternalAxiosRequestConfig,
+    { authorization: string | null; isLogin: boolean }
+  >()
   requestInterceptor = http.interceptors.request.use((config) => {
-    // Credentials are the only authentication needed by the login endpoint.
-    if (
-      config.url !== '/api/auth/login' &&
-      !/^https?:\/\//i.test(config.url ?? '') &&
-      !config.url?.startsWith('//')
-    ) {
-      const authorization = auth.getAuthorization()
-      if (authorization) config.headers.set('Authorization', authorization)
-    }
+    const backend = backendRequest(config)
+    const authorization = backend ? auth.getAuthorization() : null
+    // This layer owns Authorization; discard stale/default/manual headers too.
+    config.headers.delete('Authorization')
+    if (authorization) config.headers.set('Authorization', authorization)
+    requests.set(config, { authorization, isLogin: backend?.isLogin ?? false })
     return config
   })
 
-  function clearRejectedSession(
-    config: { headers?: { get?: (key: string) => unknown } } | undefined,
-  ) {
-    const authorization = config?.headers?.get?.('Authorization')
-    if (authorization && authorization === auth.getAuthorization()) auth.logout()
+  function clearRejectedSession(config: InternalAxiosRequestConfig | undefined) {
+    const request = config && requests.get(config)
+    if (
+      request?.authorization &&
+      !request.isLogin &&
+      request.authorization === auth.getAuthorization()
+    ) {
+      auth.logout()
+    }
   }
   responseInterceptor = http.interceptors.response.use(
     (response) => {
-      if (response.data?.code === 401) clearRejectedSession(response.config)
+      if (isUnauthorizedResponse(response)) clearRejectedSession(response.config)
       return response
     },
     (error: unknown) => {
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
+      if (axios.isAxiosError(error) && error.response && isUnauthorizedResponse(error.response)) {
         clearRejectedSession(error.config)
       }
       return Promise.reject(error)
