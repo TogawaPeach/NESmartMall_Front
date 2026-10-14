@@ -1,10 +1,21 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ElAlert, ElButton, ElIcon, ElInput, ElTooltip } from 'element-plus'
+import {
+  ElAlert,
+  ElButton,
+  ElDropdown,
+  ElDropdownItem,
+  ElDropdownMenu,
+  ElIcon,
+  ElInput,
+  ElTooltip,
+} from 'element-plus'
 import { Search, ShoppingCart, Tickets, User } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import jingweiLogo from '@/assets/jingwei-logo.svg'
 import { productSearchLocation } from '@/constants/productCategories'
+import LoginDialog from './LoginDialog.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
   keyword: string
@@ -18,6 +29,8 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
+const auth = useAuthStore()
+const showLogin = ref(false)
 const searchInput = ref<InstanceType<typeof ElInput>>()
 const showSearchWarning = ref(false)
 
@@ -53,7 +66,6 @@ const promotionItems = [
 const utilityItems = [
   { route: 'orders', label: '我的订单', icon: Tickets },
   { route: 'cart', label: '购物车', icon: ShoppingCart },
-  { route: 'account', label: '用户入口', icon: User },
 ]
 
 function utilityLabel(route: string, label: string) {
@@ -153,6 +165,40 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
             <ElIcon aria-hidden="true"><component :is="item.icon" /></ElIcon>
           </ElButton>
         </ElTooltip>
+        <ElTooltip
+          v-if="!auth.isAuthenticated"
+          content="用户入口 · 登录"
+          :trigger="['hover', 'focus']"
+          placement="bottom"
+          :show-after="150"
+        >
+          <ElButton
+            class="utility-button"
+            aria-label="用户入口 · 登录"
+            aria-haspopup="dialog"
+            @click="showLogin = true"
+          >
+            <ElIcon aria-hidden="true"><User /></ElIcon>
+          </ElButton>
+        </ElTooltip>
+        <ElDropdown v-else trigger="click" placement="bottom-end" @command="auth.logout()">
+          <ElButton
+            class="utility-button utility-button--account"
+            :aria-label="`${auth.displayName} · 账号菜单`"
+          >
+            <ElIcon aria-hidden="true"><User /></ElIcon>
+            <span class="account-name">{{ auth.displayName }}</span>
+          </ElButton>
+          <template #dropdown>
+            <ElDropdownMenu class="account-dropdown">
+              <li class="account-summary" role="presentation">
+                <strong>{{ auth.displayName }}</strong>
+                <span>{{ auth.user?.account }}</span>
+              </li>
+              <ElDropdownItem command="logout" divided>退出登录</ElDropdownItem>
+            </ElDropdownMenu>
+          </template>
+        </ElDropdown>
       </div>
     </nav>
     <ElAlert
@@ -164,6 +210,7 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
       show-icon
       :closable="false"
     />
+    <LoginDialog v-model="showLogin" />
   </header>
 </template>
 
@@ -310,6 +357,39 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   font-size: 25px;
 }
 
+.utility-button--account {
+  width: auto;
+  max-width: 112px;
+  padding: 0 8px;
+  gap: 5px;
+}
+
+.account-name {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.account-dropdown .account-summary) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 260px;
+  padding: 10px 18px;
+  overflow-wrap: anywhere;
+}
+
+:global(.account-dropdown .account-summary strong) {
+  color: var(--store-text);
+  font-size: 14px;
+}
+
+:global(.account-dropdown .account-summary span) {
+  color: var(--store-muted);
+  font-size: 13px;
+}
+
 /* Keep unavailable entries focusable so keyboard users can read their tooltip. */
 .utility-button[aria-disabled='true'] {
   cursor: default;
@@ -375,6 +455,14 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   .utility-button {
     width: 34px;
     font-size: 23px;
+  }
+
+  .utility-button--account {
+    padding: 0;
+  }
+
+  .account-name {
+    display: none;
   }
 }
 </style>
