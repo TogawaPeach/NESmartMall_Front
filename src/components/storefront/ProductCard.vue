@@ -209,12 +209,45 @@ const sales = computed(() =>
 }
 
 @media (max-width: 599px) {
+  .product-image-area {
+    padding: 8px 8px 0;
+  }
+
+  .product-image,
+  .product-image-area > .image-placeholder {
+    inset: 8px 8px 0;
+  }
+
   .product-name {
-    font-size: 18px;
+    font-size: 14px;
   }
 
   .product-details {
-    padding: 14px 16px 18px;
+    padding: 10px;
+  }
+
+  .product-summary {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  .product-price {
+    font-size: 22px;
+  }
+
+  .currency {
+    font-size: 14px;
+  }
+
+  .price-pending {
+    font-size: 14px;
+  }
+
+  .product-sales {
+    margin: 0;
+    font-size: 12px;
   }
 }
 </style>

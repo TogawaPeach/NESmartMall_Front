@@ -309,8 +309,8 @@ const viewAllLocation = computed(() => productListLocation(category.value, 1))
   }
 
   .catalog :deep(.product-grid) {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
   .catalog-content {
