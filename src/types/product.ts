@@ -21,6 +21,21 @@ export interface Product {
   sales: number | null
 }
 
+export interface ProductDetail {
+  id: string
+  name: string
+  model: string | null
+  imageUrl: string | null
+  /** Preserve integer fen so even large valid prices can be displayed exactly. */
+  priceFen: number | null
+  sales: number
+  stock: number
+  detailImages: string[]
+}
+
+export type ProductDetailLoadState =
+  'loading' | 'success' | 'login-required' | 'unavailable' | 'forbidden' | 'error'
+
 export interface ProductQuery {
   category: ProductCategoryKey
   keyword: string

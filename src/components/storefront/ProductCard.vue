@@ -23,47 +23,55 @@ const sales = computed(() =>
 
 <template>
   <article class="product" :aria-label="title || undefined">
-    <ElCard class="product-card" shadow="never" :body-style="{ padding: '0' }">
-      <div class="product-image-area">
-        <ElImage
-          v-if="product.imageUrl"
-          :key="product.imageUrl"
-          :src="product.imageUrl"
-          :alt="title || '商品图片'"
-          fit="contain"
-          class="product-image"
-        >
-          <template #placeholder>
-            <div class="image-placeholder">
-              <ElIcon aria-hidden="true"><Picture /></ElIcon>
-              <span>图片加载中</span>
-            </div>
-          </template>
-          <template #error>
-            <div class="image-placeholder">
-              <ElIcon aria-hidden="true"><Picture /></ElIcon>
-              <span>暂无图片</span>
-            </div>
-          </template>
-        </ElImage>
-        <div v-else class="image-placeholder">
-          <ElIcon aria-hidden="true"><Picture /></ElIcon>
-          <span>暂无图片</span>
+    <RouterLink
+      class="product-link"
+      :to="{ name: 'product-detail', params: { id: String(product.id) } }"
+      target="_blank"
+      rel="noopener noreferrer"
+      :aria-label="`${title || '商品'}，查看详情（在新标签页中打开）`"
+    >
+      <ElCard class="product-card" shadow="never" :body-style="{ padding: '0' }">
+        <div class="product-image-area">
+          <ElImage
+            v-if="product.imageUrl"
+            :key="product.imageUrl"
+            :src="product.imageUrl"
+            :alt="title || '商品图片'"
+            fit="contain"
+            class="product-image"
+          >
+            <template #placeholder>
+              <div class="image-placeholder">
+                <ElIcon aria-hidden="true"><Picture /></ElIcon>
+                <span>图片加载中</span>
+              </div>
+            </template>
+            <template #error>
+              <div class="image-placeholder">
+                <ElIcon aria-hidden="true"><Picture /></ElIcon>
+                <span>暂无图片</span>
+              </div>
+            </template>
+          </ElImage>
+          <div v-else class="image-placeholder">
+            <ElIcon aria-hidden="true"><Picture /></ElIcon>
+            <span>暂无图片</span>
+          </div>
         </div>
-      </div>
 
-      <div class="product-details">
-        <h2 class="product-name">{{ title }}</h2>
-        <div class="product-summary">
-          <p v-if="price !== null" class="product-price" :aria-label="`人民币 ${price} 元`">
-            <span class="currency" aria-hidden="true">¥</span>
-            <span aria-hidden="true">{{ price }}</span>
-          </p>
-          <p v-else class="price-pending">价格待确认</p>
-          <p class="product-sales">{{ sales === null ? '购买人数暂无' : `${sales}人购买` }}</p>
+        <div class="product-details">
+          <h2 class="product-name">{{ title }}</h2>
+          <div class="product-summary">
+            <p v-if="price !== null" class="product-price" :aria-label="`人民币 ${price} 元`">
+              <span class="currency" aria-hidden="true">¥</span>
+              <span aria-hidden="true">{{ price }}</span>
+            </p>
+            <p v-else class="price-pending">价格待确认</p>
+            <p class="product-sales">{{ sales === null ? '购买人数暂无' : `${sales}人购买` }}</p>
+          </div>
         </div>
-      </div>
-    </ElCard>
+      </ElCard>
+    </RouterLink>
   </article>
 </template>
 
@@ -71,6 +79,16 @@ const sales = computed(() =>
 .product,
 .product-card {
   min-width: 0;
+}
+
+.product-link {
+  display: block;
+  height: 100%;
+  border-radius: 12px;
+}
+
+.product-link:hover .product-card {
+  border-color: var(--store-border-hover);
 }
 
 .product-card {
