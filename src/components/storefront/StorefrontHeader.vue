@@ -161,7 +161,18 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
           placement="bottom"
           :show-after="150"
         >
+          <RouterLink
+            v-if="item.route === 'cart'"
+            class="utility-button cart-link"
+            :to="{ name: 'cart' }"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="购物车（在新标签页中打开）"
+          >
+            <ElIcon aria-hidden="true"><ShoppingCart /></ElIcon>
+          </RouterLink>
           <ElButton
+            v-else
             class="utility-button"
             :aria-label="utilityLabel(item.route, item.label)"
             :aria-disabled="!router.hasRoute(item.route)"
@@ -367,6 +378,17 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   max-width: 112px;
   padding: 0 8px;
   gap: 5px;
+}
+
+.cart-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--store-text);
+}
+
+.cart-link:hover {
+  background: var(--store-selected);
 }
 
 .account-name {

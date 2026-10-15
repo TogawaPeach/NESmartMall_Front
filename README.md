@@ -80,3 +80,20 @@ npm test
 ```sh
 npm run lint
 ```
+
+
+## 购物车页面
+
+顶部购物车在新标签页打开 `/cart`，未登录时显示登录引导，成功登录后自动加载。商品支持单选、全选和实时参考合计；缺货、下架、失效、库存不足或金额待确认的商品无法勾选。数量只读，购买按钮暂未开放，本期不做购买弹窗。
+
+真实请求为 `GET /api/cart`，复用统一 HTTP 客户端及 Bearer 认证。后端目前仅有服务骨架，接口未就绪时显示明确错误，不自动回退模拟数据。
+
+显式启用开发模拟：
+
+```sh
+VITE_CART_MOCK=true VITE_CART_MOCK_SCENARIO=normal npm run dev
+```
+
+模拟需要已有有效的本地登录状态，仅拦截购物车查询，不模拟登录、不写数据库。场景可选 `normal`、`mixed`（默认）、`empty`、`forbidden`、`unavailable`、`error`、`malformed`；切换后重启开发服务。生产构建不包含模拟中间件。
+
+字段草案、联调边界与验收说明见 [购物车交接](docs/requirements/购物车页面需求与前端开发交接.md)。
