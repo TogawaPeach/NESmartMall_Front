@@ -81,7 +81,8 @@ async function mount({ authenticated = false, path = '/products?page=1', adapter
   const requests = []
   http.defaults.adapter = async (config) => {
     requests.push(config)
-    if (config.url === '/api/auth/login') return reply(config, { code: 200, data: loginData })
+    if (config.url === '/api/auth/login' || config.url === '/api/auth/register')
+      return reply(config, { code: 200, data: loginData })
     return adapter ? adapter(config) : reply(config, page)
   }
   const router = createRouter({
@@ -169,6 +170,25 @@ test('logout clears catalogue results and shows login guidance without retrying 
   assert.equal(list.total.value, null)
   assert.deepEqual(list.products.value, [])
   assert.equal(requests.length, 1)
+})
+
+test('registering from a protected page loads the current query without another login', async () => {
+  const { list, auth, requests, router } = await mount({ path: '/products?keyword=RTK&page=1' })
+  await auth.signUp({
+    account: '13800138000',
+    nickname: '测试用户',
+    password: 'test-only',
+    role: 1,
+  })
+  await flush()
+  assert.equal(list.state.value, 'empty')
+  assert.equal(router.currentRoute.value.fullPath, '/products?keyword=RTK&page=1')
+  assert.equal(requests.filter((r) => r.url === '/api/auth/login').length, 0)
+  assert.equal(requests.filter((r) => r.url === '/api/auth/register').length, 1)
+  const productRequests = requests.filter((r) => r.url === '/api/products/page')
+  assert.equal(productRequests.length, 1)
+  assert.deepEqual(productRequests[0].params, { keyword: 'RTK', pageNum: 1 })
+  assert.equal(productRequests[0].headers.get('Authorization'), 'Bearer guide-token')
 })
 
 for (const business of [true, false]) {

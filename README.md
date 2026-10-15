@@ -10,7 +10,7 @@
 
 首页组件位于 `src/components/storefront/`，页面位于 `src/views/HomeView.vue`，查询状态位于 `src/composables/useHomeProducts.ts`。订单、购物车在对应路由未实现时禁用。
 
-用户入口打开账号密码登录弹窗，提交 `POST /api/auth/login`，JSON body 为 `{ "account": "账号", "password": "密码" }`。仅当业务 `code` 为 `200` 且返回完整的 `accessToken`、`tokenType: "Bearer"`、`expiresIn` 和用户信息时建立登录状态；登录成功关闭弹窗并留在当前页面。入口保留用户图标，桌面显示昵称，点击可查看昵称、账号和退出登录。登录会话存入同源标签页共享的 `localStorage`，刷新、新标签页及浏览器重新打开时，未过期的会话均可恢复；到期或退出时清理，不保存密码。退出登录目前清理前端会话，不调用未提供的后端注销接口。注册、找回密码和个人中心尚未接入。
+用户入口打开账号密码登录弹窗，提交 `POST /api/auth/login`，JSON body 为 `{ "account": "账号", "password": "密码" }`。仅当业务 `code` 为 `200` 且返回完整的 `accessToken`、`tokenType: "Bearer"`、`expiresIn` 和用户信息时建立登录状态；登录成功关闭弹窗并留在当前页面。注册表单提交 `POST /api/auth/register`，仅发送 account、nickname、password、role；注册成功直接使用响应中的 token 和用户信息建立同样的会话，无需再次登录，详见 [注册交接](docs/requirements/注册功能需求与前端实现交接.md)。入口保留用户图标，桌面显示昵称，点击可查看昵称、账号和退出登录。登录会话存入同源标签页共享的 `localStorage`，刷新、新标签页及浏览器重新打开时，未过期的会话均可恢复；到期或退出时清理，不保存密码。退出登录目前清理前端会话，不调用未提供的后端注销接口。找回密码和个人中心尚未接入。
 
 共享 `http` 请求层统一处理 Authorization：只要当前会话 token 未过期，首页等公开接口、分页/搜索及登录接口都自动携带 `Authorization: Bearer <accessToken>`；匿名或过期时不携带。范围按 Axios 最终请求地址判断，仅信任同源 `/api` 路径及配置的 `VITE_API_BASE_URL` 的同源同路径前缀（按路径段匹配），支持相对、绝对及协议相对地址；第三方地址、其他路径以及请求临时覆盖到未配置的后端均不携带会话 token。业务组件不拼接认证头，URL 和业务 body 不追加 token 或用户身份。
 

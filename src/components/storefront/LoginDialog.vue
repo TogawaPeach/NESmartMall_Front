@@ -13,7 +13,6 @@ import {
 import type { FormInstance, FormRules } from 'element-plus'
 import { Lock, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
-import { register } from '@/api/auth'
 import type { RegisterCredentials } from '@/types/auth'
 
 const visible = defineModel<boolean>({ required: true })
@@ -26,7 +25,6 @@ const formRef = ref<FormInstance>()
 const accountInput = ref<InstanceType<typeof ElInput>>()
 const submitting = ref(false)
 const errorMessage = ref('')
-const successMessage = ref('')
 let controller: AbortController | undefined
 let loginTrigger: HTMLElement | null = null
 let revision = 0
@@ -65,7 +63,6 @@ const registrationRules: FormRules = {
 
 function clearMessages() {
   errorMessage.value = ''
-  successMessage.value = ''
 }
 
 async function switchMode() {
@@ -128,25 +125,13 @@ async function submit() {
   submitting.value = true
   clearMessages()
   try {
-    if (registering) {
-      const account = form.account.trim()
-      await register({ ...form }, { signal: request.signal })
-      if (request.signal.aborted || controller !== request) return
-      mode.value = 'login'
-      form.account = account
-      form.nickname = ''
-      form.password = ''
-      form.role = 1
-      successMessage.value = '注册成功，请登录'
-      await nextTick()
-      formRef.value?.clearValidate()
-    } else {
-      const signedIn = await auth.signIn(
-        { account: form.account, password: form.password },
-        { signal: request.signal },
-      )
-      if (signedIn && !request.signal.aborted) visible.value = false
-    }
+    const signedIn = registering
+      ? await auth.signUp({ ...form }, { signal: request.signal })
+      : await auth.signIn(
+          { account: form.account, password: form.password },
+          { signal: request.signal },
+        )
+    if (signedIn && !request.signal.aborted && controller === request) visible.value = false
   } catch (error) {
     if (!request.signal.aborted) {
       errorMessage.value =
@@ -157,10 +142,6 @@ async function submit() {
     if (controller === request) {
       submitting.value = false
       controller = undefined
-      if (registering && successMessage.value) {
-        await nextTick()
-        if (visible.value) focusAccount()
-      }
     }
   }
 }
@@ -248,14 +229,6 @@ async function submit() {
         </ElRadioGroup>
       </ElFormItem>
       <ElAlert
-        v-if="successMessage"
-        :title="successMessage"
-        type="success"
-        show-icon
-        :closable="false"
-        class="login-error"
-      />
-      <ElAlert
         v-if="errorMessage"
         :title="errorMessage"
         type="error"
@@ -277,9 +250,6 @@ async function submit() {
         {{ isRegister ? '返回登录' : '注册' }}
       </ElButton>
     </ElForm>
-    <p class="login-note">
-      {{ isRegister ? '注册成功后，请使用手机号和密码登录' : '登录成功后将继续停留在当前页面' }}
-    </p>
   </ElDialog>
 </template>
 
@@ -350,13 +320,6 @@ async function submit() {
 
 .store-login-dialog.is-register .el-form-item {
   margin-bottom: 20px;
-}
-
-.store-login-dialog .login-note {
-  margin: 18px 0 0;
-  color: var(--store-muted);
-  font-size: 12px;
-  text-align: center;
 }
 
 @media (max-width: 599px) {

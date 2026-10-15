@@ -172,14 +172,14 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
         </ElTooltip>
         <ElTooltip
           v-if="!auth.isAuthenticated"
-          content="用户入口 · 登录"
+          content="登录"
           :trigger="['hover', 'focus']"
           placement="bottom"
           :show-after="150"
         >
           <ElButton
             class="utility-button"
-            aria-label="用户入口 · 登录"
+            aria-label="登录"
             aria-haspopup="dialog"
             @click="loginPrompt.openLogin()"
           >

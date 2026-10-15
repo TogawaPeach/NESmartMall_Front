@@ -25,10 +25,38 @@ function businessMessage(value: unknown, fallback: string): string {
     : fallback
 }
 
+function parseAuthData(data: unknown, action: '登录' | '注册'): LoginData {
+  if (
+    !isRecord(data) ||
+    typeof data.accessToken !== 'string' ||
+    !data.accessToken.trim() ||
+    /\s/.test(data.accessToken) ||
+    data.tokenType !== 'Bearer' ||
+    typeof data.expiresIn !== 'number' ||
+    !Number.isFinite(data.expiresIn) ||
+    data.expiresIn <= 0 ||
+    !Number.isSafeInteger(Date.now() + data.expiresIn * 1000) ||
+    !isAuthUser(data.user)
+  ) {
+    throw new Error(`${action}响应格式异常，请稍后重试`)
+  }
+  return {
+    accessToken: data.accessToken,
+    tokenType: 'Bearer',
+    expiresIn: data.expiresIn,
+    user: {
+      id: data.user.id,
+      account: data.user.account,
+      nickname: data.user.nickname,
+      role: data.user.role,
+    },
+  }
+}
+
 export async function register(
   credentials: RegisterCredentials,
   options: { signal?: AbortSignal } = {},
-): Promise<void> {
+): Promise<LoginData> {
   const account = credentials.account.trim()
   const nickname = credentials.nickname.trim()
   if (!/^1[3-9]\d{9}$/.test(account)) throw new Error('请输入有效的11位手机号')
@@ -59,6 +87,7 @@ export async function register(
   if (!isRecord(payload) || payload.code !== 200) {
     throw new Error(businessMessage(payload, '注册失败，请稍后重试'))
   }
+  return parseAuthData(payload.data, '注册')
 }
 
 export async function login(
@@ -92,30 +121,5 @@ export async function login(
   if (!isRecord(payload) || payload.code !== 200) {
     throw new Error(businessMessage(payload, '登录失败，请重试'))
   }
-  const data = payload.data
-  if (
-    !isRecord(data) ||
-    typeof data.accessToken !== 'string' ||
-    !data.accessToken.trim() ||
-    /\s/.test(data.accessToken) ||
-    data.tokenType !== 'Bearer' ||
-    typeof data.expiresIn !== 'number' ||
-    !Number.isFinite(data.expiresIn) ||
-    data.expiresIn <= 0 ||
-    !Number.isSafeInteger(Date.now() + data.expiresIn * 1000) ||
-    !isAuthUser(data.user)
-  ) {
-    throw new Error('登录响应格式异常，请稍后重试')
-  }
-  return {
-    accessToken: data.accessToken,
-    tokenType: 'Bearer',
-    expiresIn: data.expiresIn,
-    user: {
-      id: data.user.id,
-      account: data.user.account,
-      nickname: data.user.nickname,
-      role: data.user.role,
-    },
-  }
+  return parseAuthData(payload.data, '登录')
 }

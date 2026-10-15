@@ -1,7 +1,7 @@
 import { computed, onScopeDispose, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
-import { isAuthUser, login } from '@/api/auth'
-import type { AuthSession, LoginCredentials } from '@/types/auth'
+import { isAuthUser, login, register } from '@/api/auth'
+import type { AuthSession, LoginCredentials, LoginData, RegisterCredentials } from '@/types/auth'
 
 const SESSION_KEY = 'nesmartmall.auth'
 const REVISION_KEY = 'nesmartmall.auth.revision'
@@ -155,10 +155,13 @@ export const useAuthStore = defineStore('auth', () => {
     return session.value ? `Bearer ${session.value.accessToken}` : null
   }
 
-  async function signIn(credentials: LoginCredentials, options: { signal?: AbortSignal } = {}) {
+  async function authenticate(
+    request: () => Promise<LoginData>,
+    options: { signal?: AbortSignal },
+  ) {
     synchronizeSession()
     const requestVersion = ++version
-    const data = await login(credentials, options)
+    const data = await request()
     synchronizeSession()
     if (requestVersion !== version || options.signal?.aborted) return false
     session.value = {
@@ -169,6 +172,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
     persistSession()
     return true
+  }
+
+  function signIn(credentials: LoginCredentials, options: { signal?: AbortSignal } = {}) {
+    return authenticate(() => login(credentials, options), options)
+  }
+
+  function signUp(credentials: RegisterCredentials, options: { signal?: AbortSignal } = {}) {
+    return authenticate(() => register(credentials, options), options)
   }
 
   function scheduleExpiry() {
@@ -200,5 +211,14 @@ export const useAuthStore = defineStore('auth', () => {
     window.removeEventListener('storage', onStorage)
   })
 
-  return { isAuthenticated, user, accessToken, displayName, signIn, logout, getAuthorization }
+  return {
+    isAuthenticated,
+    user,
+    accessToken,
+    displayName,
+    signIn,
+    signUp,
+    logout,
+    getAuthorization,
+  }
 })

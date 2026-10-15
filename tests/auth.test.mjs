@@ -456,7 +456,9 @@ test('login sends JSON credentials in the POST body without changing the passwor
 })
 
 for (const role of [1, 0]) {
-  test(`registration submits only the agreed fields with numeric role ${role} and keeps the user signed out`, async () => {
+  test(`registration submits only the agreed fields with numeric role ${role} and returns authentication data`, async () => {
+    const payload = response()
+    payload.data.user.role = role
     http.defaults.adapter = async (config) => {
       assert.equal(config.method, 'post')
       assert.equal(config.url, '/api/auth/register')
@@ -467,17 +469,122 @@ for (const role of [1, 0]) {
         password: ' password ',
         role,
       })
-      return adapter({ code: 200, message: '注册成功', data: null })(config)
+      return adapter(payload)(config)
     }
-    await register({
+    const data = await register({
       account: ' 13800138000 ',
       nickname: ' 测绘小助手 ',
       password: ' password ',
       role,
       status: 0,
     })
+    assert.deepEqual(data, payload.data)
     assert.equal(store.isAuthenticated, false)
     assert.equal(entries.has(sessionKey), false)
+  })
+}
+
+for (const role of [1, 0]) {
+  test(`sign-up for role ${role} persists the returned session and authorizes requests without a login call`, async () => {
+    const payload = response()
+    payload.data.user = { id: '4', account: '13800138000', nickname: '测试用户', role }
+    let calls = 0
+    http.defaults.adapter = async (config) => {
+      calls++
+      assert.equal(config.url, '/api/auth/register')
+      return adapter(payload)(config)
+    }
+    const startedAt = Date.now()
+    assert.equal(
+      await store.signUp({
+        account: '13800138000',
+        nickname: '测试用户',
+        password: 'secret',
+        role,
+      }),
+      true,
+    )
+    assert.equal(calls, 1)
+    assert.equal(store.isAuthenticated, true)
+    assert.deepEqual(store.user, payload.data.user)
+    assert.equal(store.displayName, '测试用户')
+    const saved = JSON.parse(entries.get(sessionKey))
+    assert.equal(saved.accessToken, payload.data.accessToken)
+    assert.ok(saved.expiresAt >= startedAt + payload.data.expiresIn * 1000)
+    assert.ok(saved.expiresAt <= Date.now() + payload.data.expiresIn * 1000)
+    assert.equal(JSON.stringify(saved).includes('secret'), false)
+    const restored = createPeer()
+    assert.equal(restored.isAuthenticated, true)
+    assert.deepEqual(restored.user, payload.data.user)
+    http.defaults.adapter = async (config) => {
+      assert.equal(config.headers.get('Authorization'), `Bearer ${payload.data.accessToken}`)
+      return adapter({ code: 200 })(config)
+    }
+    await http.get('/api/products')
+  })
+}
+
+test('registration rejects missing or invalid session data without replacing an existing session', async () => {
+  await signIn('existing-token')
+  const saved = entries.get(sessionKey)
+  for (const data of [
+    null,
+    {},
+    ...[
+      { accessToken: '' },
+      { accessToken: 'invalid token' },
+      { tokenType: 'Basic' },
+      { expiresIn: 0 },
+      { expiresIn: '86400' },
+      { expiresIn: Infinity },
+      { expiresIn: Number.MAX_SAFE_INTEGER },
+      { user: null },
+      { user: { ...response().data.user, id: 4 } },
+    ].map((change) => ({ ...response().data, ...change })),
+  ]) {
+    http.defaults.adapter = adapter({ code: 200, data })
+    await assert.rejects(
+      store.signUp({
+        account: '13800138000',
+        nickname: '测试用户',
+        password: 'secret',
+        role: 1,
+      }),
+      /注册响应格式异常/,
+    )
+    assert.equal(store.accessToken, 'existing-token')
+    assert.equal(entries.get(sessionKey), saved)
+  }
+})
+
+for (const action of ['abort', 'logout', 'another-tab-login']) {
+  test(`a late registration response cannot establish a session after ${action}`, async () => {
+    let finish
+    http.defaults.adapter = (config) =>
+      new Promise((resolve) => {
+        finish = () => resolve(adapter(response())(config))
+      })
+    const controller = new AbortController()
+    const pending = store.signUp(
+      {
+        account: '13800138000',
+        nickname: '测试用户',
+        password: 'secret',
+        role: 1,
+      },
+      { signal: controller.signal },
+    )
+    await new Promise((resolve) => setImmediate(resolve))
+    if (action === 'abort') controller.abort()
+    else if (action === 'logout') store.logout()
+    else entries.set(sessionKey, JSON.stringify(storedSession('another-tab-token')))
+    finish()
+    if (action === 'abort') await assert.rejects(pending, { code: 'ERR_CANCELED' })
+    else assert.equal(await pending, false)
+    assert.equal(
+      store.getAuthorization(),
+      action === 'another-tab-login' ? 'Bearer another-tab-token' : null,
+    )
   })
 }
 
