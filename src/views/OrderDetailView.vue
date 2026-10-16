@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ElIcon } from 'element-plus'
-import { Check, Tickets } from '@element-plus/icons-vue'
+import { ElButton, ElIcon } from 'element-plus'
+import { Check, Service, Tickets } from '@element-plus/icons-vue'
 import { useOrderDetail } from '@/composables/useOrders'
 import { formatOrderTime, orderStatusInfo } from '@/constants/orderStatus'
 import { formatPriceFen } from '@/utils/price'
@@ -9,8 +9,10 @@ import OrderPageShell from '@/components/storefront/OrderPageShell.vue'
 import OrderItems from '@/components/storefront/OrderItems.vue'
 import OrderActions from '@/components/storefront/OrderActions.vue'
 import OrderPageState from '@/components/storefront/OrderPageState.vue'
+import { useCustomerServiceContext } from '@/composables/useCustomerServiceContext'
 
 const { data: order, state, retry, listLocation } = useOrderDetail()
+const { consultOrder } = useCustomerServiceContext()
 const steps = computed(() =>
   order.value
     ? [
@@ -45,7 +47,10 @@ const steps = computed(() =>
                 <p>{{ orderStatusInfo(order.status).description }}</p>
               </div>
             </div>
-            <OrderActions :status="order.status" />
+            <div class="order-consult-actions">
+              <ElButton :icon="Service" @click="consultOrder(order)">联系商家客服</ElButton>
+              <OrderActions :status="order.status" />
+            </div>
           </div>
           <p class="order-number">
             订单号 <strong>{{ order.orderNo }}</strong>

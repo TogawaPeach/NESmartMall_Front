@@ -9,16 +9,18 @@ import {
   ElSkeleton,
   ElSkeletonItem,
 } from 'element-plus'
-import { Box, Picture, RefreshRight, User, Warning } from '@element-plus/icons-vue'
+import { Box, Picture, RefreshRight, Service, User, Warning } from '@element-plus/icons-vue'
 import StorefrontHeader from '@/components/storefront/StorefrontHeader.vue'
 import { useProductDetail } from '@/composables/useProductDetail'
 import { useAddToCart } from '@/composables/useAddToCart'
 import { useLoginPromptStore } from '@/stores/loginPrompt'
 import { formatPriceFen } from '@/utils/price'
+import { useCustomerServiceContext } from '@/composables/useCustomerServiceContext'
 
 const keyword = ref('')
 const loginPrompt = useLoginPromptStore()
 const { product, state, retry } = useProductDetail()
+const { consultProduct } = useCustomerServiceContext()
 const { adding, feedback, add: addToCart } = useAddToCart(product)
 const price = computed(() => {
   if (product.value?.priceFen === null || !product.value) return null
@@ -151,6 +153,13 @@ function showPurchaseNotice() {
                   >加入购物车</ElButton
                 >
               </div>
+              <ElButton
+                class="product-support-button"
+                text
+                :icon="Service"
+                @click="consultProduct(product)"
+                >咨询商品</ElButton
+              >
               <ElAlert
                 v-if="feedback"
                 class="cart-feedback"
