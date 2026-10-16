@@ -16,6 +16,52 @@ export class CartQueryError extends Error {
   }
 }
 
+export class CartAddError extends Error {
+  constructor(
+    message: string,
+    public readonly loginRequired = false,
+  ) {
+    super(message)
+    this.name = 'CartAddError'
+  }
+}
+
+function addError(body: unknown, status?: number): CartAddError {
+  const code = status ?? (isRecord(body) ? body.code : undefined)
+  const loginRequired = code === 401
+  const fallback = loginRequired ? '请先登录后再加入购物车' : '加入购物车失败，请稍后重试'
+  const message =
+    isRecord(body) && typeof body.message === 'string' && body.message.trim()
+      ? body.message.trim()
+      : fallback
+  return new CartAddError(message, loginRequired)
+}
+
+/** Add only the product reference and quantity; the gateway supplies user identity. */
+export async function addCartItem(
+  productId: string,
+  quantity: number,
+  options: { signal?: AbortSignal } = {},
+): Promise<void> {
+  readId(productId)
+  readCount(quantity, 1)
+  try {
+    const { data: body } = await http.post<unknown>('/api/cart', { productId, quantity }, options)
+    if (!isRecord(body) || body.code !== 200) throw addError(body)
+  } catch (error: unknown) {
+    if (axios.isCancel(error)) throw error
+    if (axios.isAxiosError(error)) {
+      if (error.response) throw addError(error.response.data, error.response.status)
+      throw new CartAddError(
+        error.code === 'ECONNABORTED'
+          ? '加入购物车请求超时，请先查看购物车确认结果'
+          : '无法确认加入结果，请检查网络并查看购物车',
+      )
+    }
+    throw error
+  }
+}
+
 function rejectStatus(status: unknown): never {
   if (status === 401) throw new CartQueryError('login-required')
   if (status === 403) throw new CartQueryError('forbidden')

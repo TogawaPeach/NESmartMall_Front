@@ -1,15 +1,25 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ElButton, ElIcon, ElImage, ElMessage, ElSkeleton, ElSkeletonItem } from 'element-plus'
+import {
+  ElAlert,
+  ElButton,
+  ElIcon,
+  ElImage,
+  ElMessage,
+  ElSkeleton,
+  ElSkeletonItem,
+} from 'element-plus'
 import { Box, Picture, RefreshRight, User, Warning } from '@element-plus/icons-vue'
 import StorefrontHeader from '@/components/storefront/StorefrontHeader.vue'
 import { useProductDetail } from '@/composables/useProductDetail'
+import { useAddToCart } from '@/composables/useAddToCart'
 import { useLoginPromptStore } from '@/stores/loginPrompt'
 import { formatPriceFen } from '@/utils/price'
 
 const keyword = ref('')
 const loginPrompt = useLoginPromptStore()
 const { product, state, retry } = useProductDetail()
+const { adding, feedback, add: addToCart } = useAddToCart(product)
 const price = computed(() => {
   if (product.value?.priceFen === null || !product.value) return null
   return formatPriceFen(product.value.priceFen)
@@ -33,9 +43,9 @@ const stateCopy = computed(() => {
   }
 })
 
-function showPurchaseNotice(action: 'buy' | 'cart') {
+function showPurchaseNotice() {
   if (!canPurchase.value) return
-  ElMessage.info(action === 'buy' ? '购买功能暂未开放' : '购物车功能暂未开放')
+  ElMessage.info('购买功能暂未开放')
 }
 </script>
 
@@ -130,19 +140,25 @@ function showPurchaseNotice(action: 'buy' | 'cart') {
 
             <div class="purchase-area">
               <div class="purchase-actions">
-                <ElButton
-                  class="buy-button"
-                  :disabled="!canPurchase"
-                  @click="showPurchaseNotice('buy')"
+                <ElButton class="buy-button" :disabled="!canPurchase" @click="showPurchaseNotice"
                   >立即购买</ElButton
                 >
                 <ElButton
                   class="cart-button"
-                  :disabled="!canPurchase"
-                  @click="showPurchaseNotice('cart')"
+                  :disabled="price === null || adding"
+                  :loading="adding"
+                  @click="addToCart"
                   >加入购物车</ElButton
                 >
               </div>
+              <ElAlert
+                v-if="feedback"
+                class="cart-feedback"
+                :title="feedback.message"
+                :type="feedback.type"
+                :closable="false"
+                show-icon
+              />
               <p v-if="product.stock === 0" class="availability-note" role="status">商品暂时缺货</p>
               <p v-else-if="price === null" class="availability-note" role="status">
                 价格待确认，暂不可购买
@@ -377,6 +393,9 @@ h1 {
   margin: 12px 0 0;
   color: var(--store-muted);
   font-size: 14px;
+}
+.cart-feedback {
+  margin-top: 16px;
 }
 .product-description {
   margin-top: 32px;

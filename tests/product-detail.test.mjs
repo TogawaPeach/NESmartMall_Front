@@ -178,7 +178,12 @@ test('HTTP 500 takes precedence over a misleading business 401', async () => {
   await assert.rejects(query(), { name: 'ProductResponseError' })
 })
 
-async function mount({ adapter, authenticated = false, path = '/products/123' } = {}) {
+async function mount({
+  adapter,
+  authenticated = false,
+  path = '/products/123',
+  cartActions = false,
+} = {}) {
   if (authenticated)
     entries.set(
       'nesmartmall.auth',
@@ -211,10 +216,14 @@ async function mount({ adapter, authenticated = false, path = '/products/123' } 
   })
   fixture = { auth }
   ;({ useProductDetail } = await server.ssrLoadModule('/src/composables/useProductDetail.ts'))
-  let detail
+  const useAddToCart = cartActions
+    ? (await server.ssrLoadModule('/src/composables/useAddToCart.ts')).useAddToCart
+    : null
+  let detail, cart
   const app = renderer.createApp({
     setup: () => {
       detail = useProductDetail()
+      if (useAddToCart) cart = useAddToCart(detail.product)
       return () => null
     },
   })
@@ -223,7 +232,7 @@ async function mount({ adapter, authenticated = false, path = '/products/123' } 
   fixture = { app, auth, router }
   app.mount({})
   await flush()
-  return { ...fixture, detail }
+  return { ...fixture, detail, cart }
 }
 
 test('direct detail navigation and retry only query content and recover a network failure', async () => {
@@ -442,3 +451,192 @@ test('leaving the page aborts pending content and ignores its late result', asyn
   await flush()
   assert.equal(detail.product.value, null)
 })
+
+test('adding an in-stock product posts one JSON item with Bearer and preserves BIGINT IDs', async () => {
+  const { cart } = await mount({
+    authenticated: true,
+    cartActions: true,
+    adapter: async (config) =>
+      response(
+        config,
+        config.method === 'post'
+          ? { code: 200, message: 'OK', data: null }
+          : { code: 200, data: product({ id: '9223372036854775807', stock: 1 }) },
+      ),
+    path: '/products/9223372036854775807',
+  })
+  assert.equal(requests.filter((r) => r.method === 'post').length, 0)
+  await cart.add()
+  const posts = requests.filter((r) => r.method === 'post')
+  assert.equal(posts.length, 1)
+  assert.equal(posts[0].url, '/api/cart')
+  assert.deepEqual(JSON.parse(posts[0].data), { productId: '9223372036854775807', quantity: 1 })
+  assert.equal(posts[0].headers.get('Authorization'), 'Bearer detail-token')
+  assert.equal(posts[0].headers.has('user-info'), false)
+  assert.equal(cart.feedback.value.type, 'success')
+})
+
+test('clicking add with insufficient stock shows an error and never posts', async () => {
+  const { cart } = await mount({
+    authenticated: true,
+    cartActions: true,
+    adapter: async (config) => response(config, { code: 200, data: product({ stock: 0 }) }),
+  })
+  await cart.add()
+  assert.deepEqual(cart.feedback.value, { type: 'error', message: '库存不足' })
+  assert.equal(cart.adding.value, false)
+  assert.equal(requests.filter((r) => r.method === 'post').length, 0)
+})
+
+test('anonymous add opens login without posting and missing price cannot post', async () => {
+  const { cart, detail } = await mount({ cartActions: true })
+  await cart.add()
+  const { useLoginPromptStore } = await server.ssrLoadModule('/src/stores/loginPrompt.ts')
+  assert.equal(useLoginPromptStore().visible, true)
+  detail.product.value.priceFen = null
+  await cart.add()
+  assert.equal(requests.filter((r) => r.method === 'post').length, 0)
+})
+
+test('pending add blocks double clicks and ignores success after changing product', async () => {
+  let release, signal
+  const { cart, router } = await mount({
+    authenticated: true,
+    cartActions: true,
+    adapter: async (config) => {
+      if (config.method === 'post') {
+        signal = config.signal
+        return new Promise((resolve) => {
+          release = () => resolve(response(config, { code: 200 }))
+        })
+      }
+      return response(config, { code: 200, data: product({ id: config.url.split('/').at(-1) }) })
+    },
+  })
+  const pending = cart.add()
+  await flush()
+  assert.equal(cart.adding.value, true)
+  await cart.add()
+  assert.equal(requests.filter((r) => r.method === 'post').length, 1)
+  await router.push('/products/124')
+  await flush()
+  assert.equal(signal.aborted, true)
+  release()
+  await pending
+  assert.equal(cart.feedback.value, null)
+  assert.equal(cart.adding.value, false)
+})
+
+for (const failure of ['business', 'network', 'malformed', 'http']) {
+  test(`add ${failure} failure shows an error without retry or false success`, async () => {
+    const { cart } = await mount({
+      authenticated: true,
+      cartActions: true,
+      adapter: async (config) => {
+        if (config.method !== 'post') return response(config, { code: 200, data: product() })
+        if (failure === 'network') throw new AxiosError('network', 'ERR_NETWORK', config)
+        if (failure === 'http')
+          throw new AxiosError(
+            'failed',
+            'ERR_BAD_RESPONSE',
+            config,
+            null,
+            response(config, { code: 200 }, 500),
+          )
+        return response(
+          config,
+          failure === 'business' ? { code: 409, message: '库存不足', data: null } : {},
+        )
+      },
+    })
+    await cart.add()
+    assert.equal(cart.feedback.value.type, 'error')
+    if (failure === 'business') assert.equal(cart.feedback.value.message, '库存不足')
+    assert.equal(cart.adding.value, false)
+    assert.equal(requests.filter((r) => r.method === 'post').length, 1)
+  })
+}
+
+test('logout clears pending add feedback and ignores the late result', async () => {
+  let release, signal
+  const { cart, auth } = await mount({
+    authenticated: true,
+    cartActions: true,
+    adapter: async (config) => {
+      if (config.method !== 'post') return response(config, { code: 200, data: product() })
+      signal = config.signal
+      return new Promise((resolve) => {
+        release = () => resolve(response(config, { code: 200 }))
+      })
+    },
+  })
+  const pending = cart.add()
+  await flush()
+  auth.logout()
+  assert.equal(signal.aborted, true)
+  release()
+  await pending
+  assert.equal(cart.feedback.value, null)
+  assert.equal(cart.adding.value, false)
+})
+
+test('authenticated add cannot post when the price is unknown or product is not loaded', async () => {
+  const { cart, detail } = await mount({ authenticated: true, cartActions: true })
+  detail.product.value.priceFen = null
+  await cart.add()
+  detail.product.value = null
+  await cart.add()
+  assert.equal(requests.filter((r) => r.method === 'post').length, 0)
+})
+
+test('leaving detail cancels pending add and never shows its late success', async () => {
+  let release, signal
+  const { cart, app } = await mount({
+    authenticated: true,
+    cartActions: true,
+    adapter: async (config) => {
+      if (config.method !== 'post') return response(config, { code: 200, data: product() })
+      signal = config.signal
+      return new Promise((resolve) => {
+        release = () => resolve(response(config, { code: 200 }))
+      })
+    },
+  })
+  const pending = cart.add()
+  await flush()
+  app.unmount()
+  fixture.app = undefined
+  assert.equal(signal.aborted, true)
+  release()
+  await pending
+  assert.equal(cart.feedback.value, null)
+  assert.equal(cart.adding.value, false)
+})
+
+for (const transport of ['business', 'http']) {
+  test(`add ${transport} 401 opens login even when detail can reload anonymously`, async () => {
+    const { cart, auth } = await mount({
+      authenticated: true,
+      cartActions: true,
+      adapter: async (config) => {
+        if (config.method !== 'post') return response(config, { code: 200, data: product() })
+        if (transport === 'http')
+          throw new AxiosError(
+            'unauthorized',
+            'ERR_BAD_REQUEST',
+            config,
+            null,
+            response(config, { code: 401, message: '请先登录' }, 401),
+          )
+        return response(config, { code: 401, message: '请先登录', data: null })
+      },
+    })
+    await cart.add()
+    await flush()
+    const { useLoginPromptStore } = await server.ssrLoadModule('/src/stores/loginPrompt.ts')
+    assert.equal(auth.accessToken, null)
+    assert.equal(useLoginPromptStore().visible, true)
+    assert.equal(cart.adding.value, false)
+    assert.equal(requests.filter((r) => r.method === 'post').length, 1)
+  })
+}
