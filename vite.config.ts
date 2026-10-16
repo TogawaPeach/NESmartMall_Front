@@ -2,6 +2,7 @@ import { fileURLToPath, URL } from 'node:url'
 
 import { defineConfig, loadEnv } from 'vite'
 import { cartMockPlugin } from './dev/cartMock.ts'
+import { orderMockPlugin } from './dev/orderMock.ts'
 import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
 
@@ -14,6 +15,9 @@ export default defineConfig(({ command, mode }) => {
       vueJsx(),
       ...(command === 'serve' && env.VITE_CART_MOCK === 'true'
         ? [cartMockPlugin(env.VITE_CART_MOCK_SCENARIO || 'mixed')]
+        : []),
+      ...(command === 'serve' && env.VITE_ORDER_MOCK === 'true'
+        ? [orderMockPlugin(env.VITE_ORDER_MOCK_SCENARIO || 'normal')]
         : []),
     ],
     resolve: {

@@ -8,7 +8,7 @@
 
 开发服务将 `/api` 代理到 `http://localhost:8080`，默认请求 `/api/products?limit=8`，前端省略 `sort`，由后端默认按销量降序排列。部署地址可通过 `.env.example` 中的环境变量配置；参数、响应字段及价格单位集中在 `src/api/productContract.ts`。详情见 [商品接口契约](docs/product-api-contract.md)。
 
-首页组件位于 `src/components/storefront/`，页面位于 `src/views/HomeView.vue`，查询状态位于 `src/composables/useHomeProducts.ts`。订单、购物车在对应路由未实现时禁用。
+首页组件位于 `src/components/storefront/`，页面位于 `src/views/HomeView.vue`，查询状态位于 `src/composables/useHomeProducts.ts`。订单、购物车已有独立页面，接口及开发模拟边界见文末。
 
 用户入口打开账号密码登录弹窗，提交 `POST /api/auth/login`，JSON body 为 `{ "account": "账号", "password": "密码" }`。仅当业务 `code` 为 `200` 且返回完整的 `accessToken`、`tokenType: "Bearer"`、`expiresIn` 和用户信息时建立登录状态；登录成功关闭弹窗并留在当前页面。注册表单提交 `POST /api/auth/register`，仅发送 account、nickname、password、role；注册成功直接使用响应中的 token 和用户信息建立同样的会话，无需再次登录，详见 [注册交接](docs/requirements/注册功能需求与前端实现交接.md)。入口保留用户图标，桌面显示昵称，点击可查看昵称、账号和退出登录。登录会话存入同源标签页共享的 `localStorage`，刷新、新标签页及浏览器重新打开时，未过期的会话均可恢复；到期或退出时清理，不保存密码。退出登录目前清理前端会话，不调用未提供的后端注销接口。找回密码和个人中心尚未接入。
 
@@ -97,3 +97,21 @@ VITE_CART_MOCK=true VITE_CART_MOCK_SCENARIO=normal npm run dev
 模拟需要已有有效的本地登录状态，仅拦截购物车查询，不模拟登录、不写数据库。场景可选 `normal`、`mixed`（默认）、`empty`、`forbidden`、`unavailable`、`error`、`malformed`；切换后重启开发服务。生产构建不包含模拟中间件。
 
 字段草案、联调边界与验收说明见 [购物车交接](docs/requirements/购物车页面需求与前端开发交接.md)。
+
+## 订单页面
+
+顶部「我的订单」在当前标签页进入 `/orders`，未登录点击先打开现有登录弹窗，成功后继续进入。直接访问未登录页面显示引导；退出、过期及换账号立即清空订单。列表每页 5 笔，支持全部、待付款、待发货、待收货、已完成、已取消筛选，筛选与页码保存在 URL。点击查看详情进入 `/orders/:id`，返回时保留筛选与页码。
+
+详情显示交易进度、收货及物流信息、商品成交快照和金额明细；手机号脱敏，未付款与 0 元实付分开。支付、取消和确认收货按钮暂未开放，不发送交易写请求。本期不包含购物车结算和创建订单。
+
+查询草案为 `GET /api/orders?status=...&pageNum=1&pageSize=5` 和 `GET /api/orders/:id`，复用统一 Bearer 客户端，不传用户 ID；后端尚待实现与联调。未启用模拟时显示真实接口的未开放或失败状态，不自动回退演示订单。
+
+开发模拟（仍需有效登录会话）：
+
+```sh
+VITE_ORDER_MOCK=true npm run dev
+```
+
+可加 `VITE_ORDER_MOCK_SCENARIO=empty` 验证空态；另支持 `normal`（默认，7 笔覆盖全部状态及分页）、`forbidden`、`unavailable`、`error`、`malformed`。改环境变量后重启服务。模拟页面有明确标记，中间件与订单样本仅供 Vite serve 使用，不进入生产构建。
+
+完整需求与接口草案保存在本地 Require 的《订单页面需求与前端开发交接.md》。商城促销导航仅保留「限时秒杀」，活动功能暂未开放。

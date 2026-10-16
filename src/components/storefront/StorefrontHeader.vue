@@ -18,6 +18,7 @@ import LoginDialog from './LoginDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 import { storeToRefs } from 'pinia'
 import { useLoginPromptStore } from '@/stores/loginPrompt'
+import { useOrderEntry } from '@/composables/useOrderEntry'
 
 const props = defineProps<{
   keyword: string
@@ -33,6 +34,7 @@ const emit = defineEmits<{
 const router = useRouter()
 const auth = useAuthStore()
 const loginPrompt = useLoginPromptStore()
+const { openOrders } = useOrderEntry()
 const { visible: showLogin } = storeToRefs(loginPrompt)
 const searchInput = ref<InstanceType<typeof ElInput>>()
 const showSearchWarning = ref(false)
@@ -62,10 +64,7 @@ function search() {
   window.open(href, '_blank', 'noopener,noreferrer')
 }
 
-const promotionItems = [
-  { key: 'flash-sale', label: '限时秒杀' },
-  { key: 'coupons', label: '领券中心' },
-]
+const promotionItems = [{ key: 'flash-sale', label: '限时秒杀' }]
 
 const utilityItems = [
   { route: 'orders', label: '我的订单', icon: Tickets },
@@ -77,6 +76,10 @@ function utilityLabel(route: string, label: string) {
 }
 
 function openUtility(route: string) {
+  if (route === 'orders') {
+    openOrders()
+    return
+  }
   if (router.hasRoute(route)) {
     if (!loginPrompt.requireLogin('请先登录账号')) return
     void router.push({ name: route })
@@ -454,7 +457,7 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
 
   .promotion-navigation {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     grid-column: 1 / -1;
     grid-row: 2;
   }
