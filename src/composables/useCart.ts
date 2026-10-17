@@ -258,6 +258,7 @@ export function useCart() {
     updateQuantity,
     scheduleQuantity,
     selectedCount,
+    selectedItems,
     selectedQuantity,
     totalFen,
     allSelected,

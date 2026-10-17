@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElButton, ElCheckbox, ElIcon, ElSkeleton } from 'element-plus'
 import { ShoppingCart, RefreshRight, User, Warning } from '@element-plus/icons-vue'
 import StorefrontHeader from '@/components/storefront/StorefrontHeader.vue'
 import CartItemRow from '@/components/storefront/CartItemRow.vue'
+import CheckoutReceipt from '@/components/storefront/CheckoutReceipt.vue'
 import { useCart } from '@/composables/useCart'
 import { useLoginPromptStore } from '@/stores/loginPrompt'
 import { formatPriceFen } from '@/utils/price'
 
 const keyword = ref('')
+const checkoutOpen = ref(false)
 const loginPrompt = useLoginPromptStore()
 const {
   items,
@@ -21,6 +23,7 @@ const {
   quantityErrors,
   scheduleQuantity,
   selectedCount,
+  selectedItems,
   selectedQuantity,
   totalFen,
   allSelected,
@@ -31,6 +34,24 @@ const {
   removeItem,
   retry,
 } = useCart()
+const canCheckout = computed(
+  () =>
+    state.value === 'success' &&
+    selectedCount.value > 0 &&
+    totalFen.value !== null &&
+    !updatingIds.value.size &&
+    !queuedIds.value.size &&
+    !deletingIds.value.size,
+)
+
+// Dismiss a receipt if an account change or refresh replaces its contents.
+watch([state, selectedItems, totalFen], () => {
+  checkoutOpen.value = false
+})
+
+function openCheckout() {
+  if (canCheckout.value) checkoutOpen.value = true
+}
 const stateCopy = computed(() => {
   switch (state.value) {
     case 'login-required':
@@ -170,12 +191,20 @@ const stateCopy = computed(() => {
             }}
           </p>
         </div>
-        <ElButton class="purchase-button" disabled>立即购买 · 暂未开放</ElButton>
+        <ElButton class="purchase-button" :disabled="!canCheckout" @click="openCheckout">
+          结算<span v-if="selectedCount">（{{ selectedCount }}）</span>
+        </ElButton>
       </section>
       <p v-if="state === 'success'" class="cart-note">
-        可通过加减按钮或直接输入修改数量，勾选商品可查看合计；暂不支持提交购买。
+        勾选商品后即可结算，查看你的专属小票；支付仅作演示，不会产生实际扣款。
       </p>
     </main>
+    <CheckoutReceipt
+      v-model="checkoutOpen"
+      :items="selectedItems"
+      :total-fen="totalFen ?? 0"
+      :quantity="selectedQuantity ?? 0"
+    />
   </div>
 </template>
 
@@ -378,9 +407,18 @@ h1 {
   font-size: 12px;
 }
 .purchase-button {
+  min-width: 132px;
   height: 44px;
   margin: 0;
+  border-color: var(--store-text);
   border-radius: 24px;
+  background: var(--store-text);
+  color: var(--store-surface);
+}
+.purchase-button:not(:disabled):hover {
+  border-color: var(--store-accent);
+  background: var(--store-accent);
+  color: var(--store-surface);
 }
 .cart-note {
   margin: 18px 4px 0;
