@@ -1,4 +1,5 @@
 import type { Plugin } from 'vite'
+import { MAX_CART_QUANTITY } from '../src/utils/cart.ts'
 
 /** Explicit local fixtures only. This middleware is never installed in a production build. */
 export function cartMockPlugin(scenario = 'mixed'): Plugin {
@@ -38,16 +39,36 @@ export function cartMockPlugin(scenario = 'mixed'): Plugin {
     {
       ...normal,
       cartItemId: '104',
+      productId: '45',
       name: '缺货商品（模拟商品）',
       stock: 0,
       availability: 'OUT_OF_STOCK',
     },
-    { ...normal, cartItemId: '105', name: '库存不足商品（模拟商品）', quantity: 9 },
-    { ...normal, cartItemId: '106', name: '待定价格商品（模拟商品）', price: null },
-    { ...normal, cartItemId: '107', name: '下架商品（模拟商品）', availability: 'OFF_SHELF' },
+    {
+      ...normal,
+      cartItemId: '105',
+      productId: '46',
+      name: '库存不足商品（模拟商品）',
+      quantity: 9,
+    },
+    {
+      ...normal,
+      cartItemId: '106',
+      productId: '47',
+      name: '待定价格商品（模拟商品）',
+      price: null,
+    },
+    {
+      ...normal,
+      cartItemId: '107',
+      productId: '48',
+      name: '下架商品（模拟商品）',
+      availability: 'OFF_SHELF',
+    },
     {
       ...normal,
       cartItemId: '108',
+      productId: '49',
       name: null,
       model: null,
       price: null,
@@ -57,6 +78,7 @@ export function cartMockPlugin(scenario = 'mixed'): Plugin {
     {
       ...normal,
       cartItemId: '109',
+      productId: '50',
       name: '超长名称测试：工程测量设备及配件'.repeat(6),
       coverUrl: 'https://images.example.invalid/broken.jpg',
     },
@@ -64,18 +86,79 @@ export function cartMockPlugin(scenario = 'mixed'): Plugin {
   const statuses: Record<string, number> = { forbidden: 403, unavailable: 404, error: 500 }
   const supported = ['normal', 'mixed', 'empty', 'forbidden', 'unavailable', 'error', 'malformed']
   if (!supported.includes(scenario)) throw new Error(`未知购物车模拟场景：${scenario}`)
+  const carts = new Map<string, typeof mixed>()
   return {
     name: 'local-cart-mock',
     apply: 'serve',
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        if (request.method !== 'GET' || request.url?.split('?')[0] !== '/api/cart') return next()
+        const path = request.url?.split('?')[0] || ''
+        const quantityMatch = /^\/api\/cart\/([1-9]\d*)\/quantity$/.exec(path)
+        const deleteMatch = /^\/api\/cart\/([1-9]\d*)$/.exec(path)
+        const querying = request.method === 'GET' && path === '/api/cart'
+        const updating = request.method === 'PUT' && quantityMatch
+        const removing = request.method === 'DELETE' && deleteMatch
+        if (!querying && !updating && !removing) return next()
         const status = !/^Bearer \S+$/.test(request.headers.authorization || '')
           ? 401
           : statuses[scenario] || 200
         response.statusCode = status
         response.setHeader('Content-Type', 'application/json; charset=utf-8')
         response.setHeader('Cache-Control', 'no-store')
+        const authorization = request.headers.authorization || ''
+        if (!carts.has(authorization)) {
+          carts.set(
+            authorization,
+            structuredClone(scenario === 'empty' ? [] : scenario === 'normal' ? items : mixed),
+          )
+        }
+        const currentItems = carts.get(authorization)!
+        if (removing && status === 200) {
+          const index = currentItems.findIndex((entry) => entry.productId === deleteMatch[1])
+          if (index !== -1) currentItems.splice(index, 1)
+          response.end(JSON.stringify({ code: 200, message: '开发模拟商品已移除', data: null }))
+          return
+        }
+        if (updating && status === 200) {
+          let raw = ''
+          request.on('data', (chunk: Buffer) => {
+            raw += chunk.toString()
+          })
+          request.on('end', () => {
+            const item = currentItems.find((entry) => entry.productId === quantityMatch[1])
+            try {
+              const { quantity } = JSON.parse(raw)
+              if (!item) {
+                response.statusCode = 404
+              } else if (
+                !Number.isSafeInteger(quantity) ||
+                quantity < 1 ||
+                item.availability !== 'AVAILABLE' ||
+                item.price === null ||
+                item.stock === null ||
+                quantity > item.stock ||
+                quantity > MAX_CART_QUANTITY
+              ) {
+                response.statusCode = 400
+              } else {
+                item.quantity = quantity
+              }
+            } catch {
+              response.statusCode = 400
+            }
+            response.end(
+              JSON.stringify({
+                code: response.statusCode,
+                message:
+                  response.statusCode === 200
+                    ? '开发模拟数量已修改'
+                    : '开发模拟：条目不存在或数量无效',
+                data: null,
+              }),
+            )
+          })
+          return
+        }
         response.end(
           JSON.stringify(
             status !== 200
@@ -84,14 +167,7 @@ export function cartMockPlugin(scenario = 'mixed'): Plugin {
                   code: 200,
                   message: '开发模拟数据',
                   data: {
-                    items:
-                      scenario === 'malformed'
-                        ? null
-                        : scenario === 'empty'
-                          ? []
-                          : scenario === 'normal'
-                            ? items
-                            : mixed,
+                    items: scenario === 'malformed' ? null : currentItems,
                   },
                 },
           ),

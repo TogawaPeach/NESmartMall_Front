@@ -1,4 +1,12 @@
-import type { CartItem } from '@/types/cart'
+import type { CartItem } from '../types/cart.ts'
+
+// cart_item.quantity is an INT; this is its storage limit, not a purchase quota.
+export const MAX_CART_QUANTITY = 2147483647
+
+export function cartQuantityLimit(item: CartItem): number {
+  if (item.availability !== 'AVAILABLE' || item.stock === null || item.priceFen === null) return 0
+  return Math.min(item.stock, MAX_CART_QUANTITY)
+}
 
 export function safeCartAmount(amount: bigint): number | null {
   return amount <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(amount) : null

@@ -14,6 +14,12 @@ const {
   items,
   state,
   selectedIds,
+  updatingIds,
+  queuedIds,
+  deletingIds,
+  removeErrors,
+  quantityErrors,
+  scheduleQuantity,
   selectedCount,
   selectedQuantity,
   totalFen,
@@ -22,6 +28,7 @@ const {
   selectableItems,
   setSelected,
   selectAll,
+  removeItem,
   retry,
 } = useCart()
 const stateCopy = computed(() => {
@@ -67,6 +74,7 @@ const stateCopy = computed(() => {
           v-if="state === 'success'"
           class="refresh-button"
           :icon="RefreshRight"
+          :disabled="updatingIds.size > 0 || queuedIds.size > 0 || deletingIds.size > 0"
           @click="retry"
           >刷新购物车</ElButton
         >
@@ -93,15 +101,22 @@ const stateCopy = computed(() => {
               >全选</ElCheckbox
             >
             <span class="product-heading">商品信息</span><span>单价</span
-            ><span class="quantity-heading">数量</span
-            ><span class="subtotal-heading">参考小计</span>
+            ><span class="quantity-heading">数量</span><span class="subtotal-heading">参考小计</span
+            ><span class="actions-heading">操作</span>
           </div>
           <CartItemRow
             v-for="item in items"
             :key="item.cartItemId"
             :item="item"
             :selected="selectedIds.has(item.cartItemId)"
+            :updating="updatingIds.has(item.cartItemId)"
+            :queued="queuedIds.has(item.cartItemId)"
+            :removing="deletingIds.has(item.cartItemId)"
+            :remove-error="removeErrors[item.cartItemId]"
+            :quantity-error="quantityErrors[item.cartItemId]"
             @select="setSelected(item.cartItemId, $event)"
+            @quantity="scheduleQuantity(item.cartItemId, $event)"
+            @remove="removeItem(item.cartItemId)"
           />
         </template>
         <div v-else class="cart-state">
@@ -158,7 +173,7 @@ const stateCopy = computed(() => {
         <ElButton class="purchase-button" disabled>立即购买 · 暂未开放</ElButton>
       </section>
       <p v-if="state === 'success'" class="cart-note">
-        勾选商品可查看合计；暂不支持修改数量、删除商品和提交购买。
+        可通过加减按钮或直接输入修改数量，勾选商品可查看合计；暂不支持提交购买。
       </p>
     </main>
   </div>
@@ -233,7 +248,7 @@ h1 {
 }
 .cart-table-heading {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) minmax(120px, 0.3fr) 80px minmax(140px, 0.32fr);
+  grid-template-columns: 24px minmax(0, 1fr) minmax(90px, 0.3fr) 140px minmax(110px, 0.32fr) 60px;
   gap: 20px;
   align-items: center;
   min-height: 60px;
@@ -255,7 +270,8 @@ h1 {
 .quantity-heading {
   text-align: center;
 }
-.subtotal-heading {
+.subtotal-heading,
+.actions-heading {
   text-align: right;
 }
 .cart-loading {

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { http } from './http'
 import type { CartAvailability, CartItem } from '@/types/cart'
+import { MAX_CART_QUANTITY } from '@/utils/cart'
 
 export class CartResponseError extends Error {
   constructor(message = '购物车响应格式异常') {
@@ -23,6 +24,85 @@ export class CartAddError extends Error {
   ) {
     super(message)
     this.name = 'CartAddError'
+  }
+}
+
+export class CartQuantityError extends Error {
+  constructor(message = '修改数量失败，请稍后重试') {
+    super(message)
+    this.name = 'CartQuantityError'
+  }
+}
+
+export class CartRemoveError extends Error {
+  constructor(message = '删除失败，请稍后重试') {
+    super(message)
+    this.name = 'CartRemoveError'
+  }
+}
+
+function removeError(body: unknown, status?: number): CartRemoveError {
+  const code = status ?? (isRecord(body) ? body.code : undefined)
+  const fallback = code === 401 ? '请重新登录后删除商品' : '删除失败，请稍后重试'
+  return new CartRemoveError(
+    isRecord(body) && typeof body.message === 'string' && body.message.trim()
+      ? body.message.trim()
+      : fallback,
+  )
+}
+
+/** Delete this product only from the current user's cart. */
+export async function deleteCartItem(
+  productId: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<void> {
+  readId(productId)
+  try {
+    const { data: body } = await http.delete<unknown>(`/api/cart/${productId}`, options)
+    if (!isRecord(body) || body.code !== 200) throw removeError(body)
+  } catch (error: unknown) {
+    if (axios.isCancel(error)) throw error
+    if (axios.isAxiosError(error)) {
+      if (error.response) throw removeError(error.response.data, error.response.status)
+      throw new CartRemoveError('无法确认删除结果，请检查网络并刷新购物车确认')
+    }
+    throw error
+  }
+}
+
+function quantityError(body: unknown, status?: number): CartQuantityError {
+  const code = status ?? (isRecord(body) ? body.code : undefined)
+  const fallback = code === 401 ? '请重新登录后修改数量' : '修改数量失败，请稍后重试'
+  return new CartQuantityError(
+    isRecord(body) && typeof body.message === 'string' && body.message.trim()
+      ? body.message.trim()
+      : fallback,
+  )
+}
+
+/** Set the final quantity of a product already in the current user's cart. */
+export async function setCartItemQuantity(
+  productId: string,
+  quantity: number,
+  options: { signal?: AbortSignal } = {},
+): Promise<void> {
+  readId(productId)
+  readCount(quantity, 1)
+  if (quantity > MAX_CART_QUANTITY) throw new CartQuantityError('商品数量超出可保存范围')
+  try {
+    const { data: body } = await http.put<unknown>(
+      `/api/cart/${productId}/quantity`,
+      { quantity },
+      options,
+    )
+    if (!isRecord(body) || body.code !== 200) throw quantityError(body)
+  } catch (error: unknown) {
+    if (axios.isCancel(error)) throw error
+    if (axios.isAxiosError(error)) {
+      if (error.response) throw quantityError(error.response.data, error.response.status)
+      throw new CartQuantityError('无法确认修改结果，请检查网络并刷新购物车确认数量')
+    }
+    throw error
   }
 }
 

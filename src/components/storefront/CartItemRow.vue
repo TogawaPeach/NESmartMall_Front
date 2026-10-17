@@ -1,13 +1,64 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { ElIcon, ElImage } from 'element-plus'
-import { Picture } from '@element-plus/icons-vue'
+import { computed, ref, watch } from 'vue'
+import { ElButton, ElIcon, ElImage, ElInputNumber, ElPopconfirm } from 'element-plus'
+import { InfoFilled, Picture } from '@element-plus/icons-vue'
 import type { CartItem } from '@/types/cart'
-import { cartItemIssue, cartSubtotal } from '@/utils/cart'
+import { cartItemIssue, cartQuantityLimit, cartSubtotal } from '@/utils/cart'
 import { formatPriceFen } from '@/utils/price'
 
-const props = defineProps<{ item: CartItem; selected: boolean }>()
-const emit = defineEmits<{ select: [selected: boolean] }>()
+const props = defineProps<{
+  item: CartItem
+  selected: boolean
+  updating: boolean
+  queued: boolean
+  removing: boolean
+  removeError?: string
+  quantityError?: string
+}>()
+const emit = defineEmits<{
+  select: [selected: boolean]
+  quantity: [quantity: number]
+  remove: []
+}>()
+const draftQuantity = ref<number | null>(props.item.quantity)
+const quantityLimit = computed(() => cartQuantityLimit(props.item))
+// Keep an existing excess quantity visible until the user explicitly corrects it.
+const inputMax = computed(() => Math.max(props.item.quantity, quantityLimit.value))
+watch(
+  () => [props.item.quantity, props.updating, props.queued, props.quantityError],
+  () => {
+    if (!props.updating && !props.queued) draftQuantity.value = props.item.quantity
+  },
+)
+function changeQuantity(value: number | null | undefined) {
+  if (props.updating || props.removing) return
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < 1 ||
+    quantityLimit.value < 1
+  ) {
+    draftQuantity.value = props.item.quantity
+    emit('quantity', props.item.quantity)
+    return
+  }
+  const quantity = Math.min(value, quantityLimit.value)
+  draftQuantity.value = quantity
+  emit('quantity', quantity)
+}
+function inputQuantity(value: number | null | undefined) {
+  if (props.updating || props.removing) return
+  // Typing must replace an earlier button edit before blur fires `change`.
+  // Incomplete input cancels the pending save by restoring the confirmed target.
+  const quantity =
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    quantityLimit.value > 0
+      ? Math.min(value, quantityLimit.value)
+      : props.item.quantity
+  emit('quantity', quantity)
+}
 const issue = computed(() => cartItemIssue(props.item))
 const subtotal = computed(() => cartSubtotal(props.item))
 const hasDetail = computed(() => ['AVAILABLE', 'OUT_OF_STOCK'].includes(props.item.availability))
@@ -92,20 +143,74 @@ function changeSelection(event: Event) {
       ><span v-else>价格待确认</span>
     </div>
     <div class="item-quantity">
-      <span class="mobile-label">数量</span><span>× {{ item.quantity }}</span>
+      <span class="mobile-label">数量</span>
+      <div class="quantity-control" :aria-busy="updating">
+        <ElInputNumber
+          v-if="quantityLimit > 0"
+          v-model="draftQuantity"
+          :min="1"
+          :max="inputMax"
+          :step="1"
+          :precision="0"
+          step-strictly
+          :value-on-clear="item.quantity"
+          :disabled="updating || removing"
+          :aria-label="`${item.name || '商品'}的购买数量`"
+          :aria-describedby="quantityError ? `cart-quantity-status-${item.cartItemId}` : undefined"
+          inputmode="numeric"
+          size="small"
+          @input="inputQuantity"
+          @change="changeQuantity"
+        />
+        <span v-else>× {{ item.quantity }}</span>
+        <p
+          v-if="quantityError"
+          :id="`cart-quantity-status-${item.cartItemId}`"
+          class="quantity-status quantity-status--error"
+          role="status"
+          aria-live="polite"
+        >
+          {{ quantityError }}
+        </p>
+      </div>
     </div>
     <div class="item-subtotal">
       <span class="mobile-label">参考小计</span
       ><strong v-if="subtotal !== null">¥{{ formatPriceFen(subtotal) }}</strong
       ><span v-else>{{ item.availability === 'AVAILABLE' ? '待确认' : '—' }}</span>
     </div>
+    <div class="item-actions">
+      <ElPopconfirm
+        :width="240"
+        :icon="InfoFilled"
+        :title="`确定删除${item.name || '该失效商品'}吗？`"
+        confirm-button-text="删除"
+        cancel-button-text="取消"
+        confirm-button-type="danger"
+        placement="bottom-end"
+        :disabled="removing"
+        @confirm="emit('remove')"
+      >
+        <template #reference>
+          <ElButton
+            class="remove-button"
+            type="danger"
+            text
+            :disabled="removing"
+            :aria-label="`删除${item.name || '已失效商品'}`"
+            >删除</ElButton
+          >
+        </template>
+      </ElPopconfirm>
+    </div>
+    <p v-if="removeError" class="remove-error" role="alert">{{ removeError }}</p>
   </article>
 </template>
 
 <style scoped>
 .cart-row {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) minmax(120px, 0.3fr) 80px minmax(140px, 0.32fr);
+  grid-template-columns: 24px minmax(0, 1fr) minmax(90px, 0.3fr) 140px minmax(110px, 0.32fr) 60px;
   gap: 20px;
   align-items: center;
   padding: 26px 24px;
@@ -196,11 +301,44 @@ h2 a:hover {
 .item-quantity {
   text-align: center;
 }
+.quantity-control {
+  min-width: 0;
+}
+.quantity-control :deep(.el-input-number) {
+  width: 140px;
+  max-width: 100%;
+}
+.quantity-status {
+  margin: 6px 0 0;
+  color: var(--store-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.quantity-status:empty {
+  display: none;
+}
+.quantity-status--error {
+  color: var(--store-sale-text);
+}
 .item-subtotal {
   text-align: right;
 }
 .item-subtotal strong {
   font-weight: 600;
+}
+.item-actions {
+  text-align: right;
+}
+.remove-button {
+  min-height: 32px;
+  padding-inline: 10px;
+}
+.remove-error {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: var(--store-sale-text);
+  font-size: 12px;
+  line-height: 1.5;
 }
 .mobile-label {
   display: none;
@@ -236,6 +374,10 @@ h2 a:hover {
     display: inline;
     flex-shrink: 0;
     color: var(--store-muted);
+  }
+  .item-actions {
+    grid-column: 2;
+    justify-self: end;
   }
   h2 {
     font-size: 15px;
