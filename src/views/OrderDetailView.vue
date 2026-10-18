@@ -95,10 +95,6 @@ const steps = computed(() =>
             <h2>物流信息</h2>
             <dl v-if="order.logistics" class="order-info-list">
               <div>
-                <dt>承运商</dt>
-                <dd>{{ order.logistics.carrier }}</dd>
-              </div>
-              <div>
                 <dt>运单号</dt>
                 <dd>{{ order.logistics.trackingNo }}</dd>
               </div>

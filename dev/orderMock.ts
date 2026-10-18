@@ -67,9 +67,7 @@ export function orderMockPlugin(scenario = 'normal'): Plugin {
         phone: '138****0000',
         address: '上海市 · 演示区 · 经纬路 100 号（虚构地址）',
       },
-      logistics: shipped
-        ? { carrier: '演示物流', trackingNo: `DEMO202610${day}000${index + 1}` }
-        : null,
+      logistics: shipped ? { trackingNo: `DEMO202610${day}000${index + 1}` } : null,
     }
   })
   return {

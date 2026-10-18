@@ -136,9 +136,7 @@ function readOrder(value: unknown): Order {
       phone: maskedPhone(recipient.phone),
       address: text(recipient.address),
     },
-    logistics: logistics
-      ? { carrier: text(logistics.carrier), trackingNo: text(logistics.trackingNo) }
-      : null,
+    logistics: logistics ? { trackingNo: text(logistics.trackingNo) } : null,
   }
   const goods = summary.items.reduce(
     (sum, item) => sum + BigInt(item.unitPriceFen) * BigInt(item.quantity),

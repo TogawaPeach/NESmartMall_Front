@@ -29,7 +29,7 @@ export interface Order extends OrderSummary {
   discountAmountFen: number
   paidAmountFen: number | null
   recipient: { name: string; phone: string; address: string }
-  logistics: { carrier: string; trackingNo: string } | null
+  logistics: { trackingNo: string } | null
 }
 
 export type OrderLoadState =

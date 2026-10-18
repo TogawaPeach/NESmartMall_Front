@@ -29,7 +29,6 @@ watch(visible, (opened) => {
   >
     <template #header="{ titleId }">
       <div class="receipt-topline">
-        <span>一份好物，一张小票</span>
         <button
           class="receipt-close"
           type="button"
@@ -44,15 +43,12 @@ watch(visible, (opened) => {
       <div class="receipt-heading">
         <p class="receipt-brand">经纬智选</p>
         <h2 :id="titleId">{{ paid ? '模拟支付成功' : '结算小票' }}</h2>
-        <p class="receipt-english">
-          {{ paid ? 'THANK YOU FOR YOUR CHOICE' : 'A LITTLE RECEIPT FOR YOUR FINDS' }}
-        </p>
       </div>
     </template>
 
     <div class="receipt-content">
       <div class="receipt-section-label">
-        <span>商品明细</span><span>{{ quantity }} 件好物</span>
+        <span>商品明细</span>
       </div>
       <ul class="receipt-items" aria-label="本次结算商品" tabindex="0">
         <li v-for="item in items" :key="item.cartItemId" class="receipt-item">
@@ -78,7 +74,7 @@ watch(visible, (opened) => {
       <div class="receipt-payment" role="status" aria-live="polite">
         <template v-if="paid">
           <div class="receipt-success-mark" aria-hidden="true">✓</div>
-          <p class="receipt-success-title">好物已选，心意已收</p>
+          <p class="receipt-success-title">支付成功</p>
           <p class="receipt-payment-note">本次为模拟支付，未产生实际扣款</p>
         </template>
         <template v-else>
@@ -88,7 +84,6 @@ watch(visible, (opened) => {
               >体验版</span
             >
           </div>
-          <p class="receipt-payment-note">确认你的好物，体验一次轻松结算</p>
         </template>
       </div>
 
@@ -101,9 +96,7 @@ watch(visible, (opened) => {
         <span v-if="!paid">¥{{ formatPriceFen(totalFen) }}</span>
         <span aria-hidden="true">↗</span>
       </button>
-      <p class="receipt-disclaimer">
-        {{ paid ? '购物车商品已保留，期待与你下次相遇' : '仅作支付演示，不会生成订单或实际扣款' }}
-      </p>
+      <p v-if="!paid" class="receipt-disclaimer">仅作支付演示，不会生成订单或实际扣款</p>
       <div class="receipt-footer" aria-hidden="true">
         <span></span><span>愿每一份选择，都恰到好处</span><span></span>
       </div>
@@ -114,7 +107,7 @@ watch(visible, (opened) => {
 <style scoped>
 .receipt-topline {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: 12px;
   color: #756a59;
@@ -155,13 +148,6 @@ watch(visible, (opened) => {
   font-size: 12px;
   font-weight: 400;
   letter-spacing: 3px;
-}
-.receipt-english {
-  margin: 8px 0 0;
-  color: #756a59;
-  font-family: monospace;
-  font-size: 9px;
-  letter-spacing: 1.1px;
 }
 .receipt-content {
   color: #443f35;

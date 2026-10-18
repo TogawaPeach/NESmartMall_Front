@@ -344,6 +344,26 @@ test('detail still validates totals, payment and recipient fields independently 
     await assert.rejects(queryOrder(order().orderNo), { name: 'OrderResponseError' })
   }
 })
+test('detail accepts tracking-only logistics and rejects missing or blank tracking numbers', async () => {
+  const { queryOrder } = await api()
+  const shipped = order({
+    status: 'PENDING_RECEIPT',
+    paidAt: '2026-10-16T03:00:00Z',
+    paidAmountFen: 260000,
+    shippedAt: '2026-10-16T04:00:00Z',
+    logistics: { trackingNo: 'TRACK202610160001' },
+  })
+  respond(shipped)
+  const result = await queryOrder(shipped.orderNo)
+  assert.deepEqual(result.logistics, { trackingNo: 'TRACK202610160001' })
+  assert.equal(result.shippedAt, '2026-10-16T04:00:00Z')
+  for (const logistics of [undefined, {}, [], { trackingNo: '' }, { trackingNo: null }]) {
+    respond({ ...shipped, logistics })
+    await assert.rejects(queryOrder(shipped.orderNo), { name: 'OrderResponseError' })
+  }
+  respond({ ...shipped, logistics: null })
+  assert.equal((await queryOrder(shipped.orderNo)).logistics, null)
+})
 test('paid zero stays distinct from unpaid and fulfilled orders require payment time', async () => {
   const { queryOrder } = await api()
   const free = order({
