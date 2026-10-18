@@ -23,7 +23,6 @@ const product = {
   detailImages: [],
 }
 const order = {
-  id: '9007199254740993101',
   orderNo: 'JW202610160001',
   status: 'PENDING_PAYMENT',
   payableAmountFen: 129900,
@@ -283,7 +282,6 @@ test('product and order entry carry only safe consultation fields and distinguis
   entry.consultOrder(order)
   assert.deepEqual(support.pendingContext, {
     kind: 'order',
-    id: '9007199254740993101',
     orderNo: 'JW202610160001',
     status: 'PENDING_PAYMENT',
     amountFen: 129900,
@@ -351,7 +349,6 @@ test('an order entry from stale page content cannot carry old account context in
   session('other-token', 'customer-2')
   support.open({
     kind: 'order',
-    id: order.id,
     orderNo: order.orderNo,
     status: order.status,
     amountFen: 129900,

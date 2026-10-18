@@ -17,7 +17,6 @@ export function useCustomerServiceContext() {
   function consultOrder(order: Order) {
     support.open({
       kind: 'order',
-      id: order.id,
       orderNo: order.orderNo,
       status: order.status,
       amountFen: order.paidAmountFen ?? order.payableAmountFen,

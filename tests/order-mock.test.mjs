@@ -32,21 +32,42 @@ async function start(scenario) {
       headers: authenticated ? { Authorization: 'Bearer local-fixture' } : {},
     })
 }
-test('explicit development mock serves authenticated list pagination and matching detail snapshots', async () => {
+test('explicit development mock serves the full authenticated list and matching detail snapshots', async () => {
   const get = await start('normal')
   assert.equal((await get('/api/orders', false)).status, 401)
-  const first = await (await get('/api/orders?pageNum=1&pageSize=5')).json()
-  assert.equal(first.data.list.length, 5)
-  assert.equal(first.data.total, 7)
-  const second = await (await get('/api/orders?pageNum=2&pageSize=5')).json()
-  assert.equal(second.data.list.length, 2)
-  const filtered = await (await get('/api/orders?status=COMPLETED&pageNum=1&pageSize=5')).json()
-  assert.equal(filtered.data.total, 2)
-  assert.ok(filtered.data.list.every((o) => o.status === 'COMPLETED'))
-  const detail = await (await get(`/api/orders/${first.data.list[0].id}`)).json()
-  assert.deepEqual(detail.data, first.data.list[0])
-  assert.equal((await get('/api/orders/999')).status, 404)
-  assert.equal((await get('/api/orders?pageNum=bad')).status, 400)
+  const all = await (await get('/api/orders')).json()
+  assert.equal(all.data.length, 7)
+  assert.ok(Array.isArray(all.data))
+  assert.equal(all.data[0].items.length, 2)
+  assert.deepEqual(
+    all.data.map((o) => o.orderNo),
+    [
+      'JW202610160001',
+      'JW202610150002',
+      'JW202610140003',
+      'JW202610130004',
+      'JW202610120005',
+      'JW202610110006',
+      'JW202610100007',
+    ],
+  )
+  const legacy = await (await get('/api/orders?pageNum=2&pageSize=5')).json()
+  assert.deepEqual(legacy.data, all.data)
+  const filtered = await (await get('/api/orders?status=COMPLETED')).json()
+  assert.equal(filtered.data.length, 2)
+  assert.ok(filtered.data.every((o) => o.status === 'COMPLETED'))
+  const detail = await (await get(`/api/orders/${all.data[0].orderNo}`)).json()
+  const { orderNo, status, createdAt, payableAmountFen, items } = detail.data
+  assert.deepEqual({ orderNo, status, createdAt, payableAmountFen, items }, all.data[0])
+  assert.ok(all.data.every((order) => !Object.hasOwn(order, 'id')))
+  assert.equal(Object.hasOwn(detail.data, 'id'), false)
+  assert.equal(all.data[0].recipient, undefined)
+  assert.equal(all.data[0].paidAt, undefined)
+  assert.ok(detail.data.recipient)
+  assert.equal(detail.data.goodsAmountFen, 1327900)
+  assert.equal((await get('/api/orders/JW999')).status, 404)
+  assert.equal((await get('/api/orders/1')).status, 404)
+  assert.equal((await get('/api/orders?status=bad')).status, 400)
 })
 test('mock failure modes preserve empty, permission, unavailable, error and malformed differences', async () => {
   for (const [scenario, status] of [
@@ -57,10 +78,10 @@ test('mock failure modes preserve empty, permission, unavailable, error and malf
     ['malformed', 200],
   ]) {
     const get = await start(scenario),
-      response = await get('/api/orders?pageNum=1&pageSize=5')
+      response = await get('/api/orders')
     assert.equal(response.status, status)
     const body = await response.json()
-    if (scenario === 'empty') assert.deepEqual(body.data.list, [])
-    if (scenario === 'malformed') assert.equal(body.data.list, null)
+    if (scenario === 'empty') assert.deepEqual(body.data, [])
+    if (scenario === 'malformed') assert.ok(!Array.isArray(body.data))
   }
 })

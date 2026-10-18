@@ -1,6 +1,5 @@
 import type { OrderStatus } from '@/types/order'
 
-export const ORDER_PAGE_SIZE = 5
 export const orderStatuses: { value: OrderStatus; label: string; description: string }[] = [
   { value: 'PENDING_PAYMENT', label: '待付款', description: '订单已提交，等待完成付款。' },
   { value: 'PENDING_SHIPMENT', label: '待发货', description: '付款已完成，等待商家安排发货。' },
@@ -13,11 +12,6 @@ export function isOrderStatus(value: unknown): value is OrderStatus {
 }
 export function orderStatusInfo(value: OrderStatus) {
   return orderStatuses.find((status) => status.value === value)!
-}
-export function orderPageNumber(value: unknown): number {
-  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return 1
-  const page = Number(value)
-  return Number.isSafeInteger(page) ? page : 1
 }
 export function formatOrderTime(value: string | null): string {
   if (!value) return '待完成'

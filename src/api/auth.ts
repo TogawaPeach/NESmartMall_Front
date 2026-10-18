@@ -62,13 +62,12 @@ export async function register(
   if (!/^1[3-9]\d{9}$/.test(account)) throw new Error('请输入有效的11位手机号')
   if (!nickname || nickname.length > 64) throw new Error('昵称须为1至64个字符')
   if (!credentials.password.trim()) throw new Error('请输入密码')
-  if (credentials.role !== 0 && credentials.role !== 1) throw new Error('请选择用户或商家')
 
   let payload: unknown
   try {
     const response = await http.post<unknown>(
       '/api/auth/register',
-      { account, nickname, password: credentials.password, role: credentials.role },
+      { account, nickname, password: credentials.password, role: 1 },
       { signal: options.signal },
     )
     payload = response.data

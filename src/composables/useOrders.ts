@@ -2,7 +2,7 @@ import axios from 'axios'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { OrderQueryError, queryOrder, queryOrders } from '@/api/orders'
-import { isOrderStatus, ORDER_PAGE_SIZE, orderPageNumber } from '@/constants/orderStatus'
+import { isOrderStatus } from '@/constants/orderStatus'
 import { useAuthStore } from '@/stores/auth'
 import type { OrderLoadState, OrderStatus } from '@/types/order'
 
@@ -58,58 +58,31 @@ export function useOrders() {
   const status = computed(() =>
     isOrderStatus(route.query.status) ? route.query.status : undefined,
   )
-  const pageNum = computed(() => orderPageNumber(route.query.page))
   const resource = useOrderQuery(
-    () => JSON.stringify([status.value, pageNum.value]),
-    (signal) => queryOrders({ status: status.value, pageNum: pageNum.value }, { signal }),
-    (page) => page.list.length === 0,
+    () => status.value ?? '',
+    (signal) => queryOrders({ status: status.value }, { signal }),
+    (orders) => orders.length === 0,
   )
-  function changePage(page: number) {
-    if (!Number.isSafeInteger(page) || page < 1) return Promise.resolve()
-    return router.push({
-      name: 'orders',
-      query: { ...(status.value ? { status: status.value } : {}), page: String(page) },
-    })
-  }
   function changeStatus(value: OrderStatus | undefined) {
     return router.push({
       name: 'orders',
-      query: { ...(value ? { status: value } : {}), page: '1' },
+      query: value ? { status: value } : {},
     })
   }
-  watch(
-    resource.data,
-    (page) => {
-      if (!page) return
-      const last = Math.max(1, Math.ceil(page.total / ORDER_PAGE_SIZE))
-      if (pageNum.value > last)
-        void router.replace({
-          name: 'orders',
-          query: { ...(status.value ? { status: status.value } : {}), page: String(last) },
-        })
-    },
-    { flush: 'sync' },
-  )
-  const listQuery = computed(() => ({
-    ...(status.value ? { status: status.value } : {}),
-    page: String(pageNum.value),
-  }))
-  return { ...resource, status, pageNum, changePage, changeStatus, listQuery }
+  const listQuery = computed(() => (status.value ? { status: status.value } : {}))
+  return { ...resource, status, changeStatus, listQuery }
 }
 
 export function useOrderDetail() {
   const route = useRoute()
   const resource = useOrderQuery(
-    () => String(route.params.id),
-    (signal) => queryOrder(String(route.params.id), { signal }),
+    () => String(route.params.orderNo),
+    (signal) => queryOrder(String(route.params.orderNo), { signal }),
     () => false,
   )
   const listLocation = computed(() => ({
     name: 'orders',
-    query: {
-      ...(isOrderStatus(route.query.status) ? { status: route.query.status } : {}),
-      page: String(orderPageNumber(route.query.page)),
-    },
+    query: isOrderStatus(route.query.status) ? { status: route.query.status } : {},
   }))
   return { ...resource, listLocation }
 }

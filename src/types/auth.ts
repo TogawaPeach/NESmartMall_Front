@@ -5,7 +5,6 @@ export interface LoginCredentials {
 
 export interface RegisterCredentials extends LoginCredentials {
   nickname: string
-  role: 0 | 1
 }
 
 export interface AuthUser {

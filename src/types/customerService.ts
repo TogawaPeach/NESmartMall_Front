@@ -9,7 +9,6 @@ export interface ProductSupportContext {
 }
 export interface OrderSupportContext {
   kind: 'order'
-  id: string
   orderNo: string
   status: OrderStatus
   amountFen: number

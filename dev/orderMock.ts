@@ -49,7 +49,6 @@ export function orderMockPlugin(scenario = 'normal'): Plugin {
     const shippingFeeFen = index === 1 ? 1200 : 0
     const payableAmountFen = goodsAmountFen + shippingFeeFen - discountAmountFen
     return {
-      id: `900719925474099310${index + 1}`,
       orderNo: `JW202610${day}000${index + 1}`,
       status,
       createdAt: timestamp('01'),
@@ -79,7 +78,7 @@ export function orderMockPlugin(scenario = 'normal'): Plugin {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const url = new URL(req.url || '/', 'http://localhost')
-        if (req.method !== 'GET' || !/^\/api\/orders(?:\/[1-9]\d*)?$/.test(url.pathname))
+        if (req.method !== 'GET' || !/^\/api\/orders(?:\/JW[1-9]\d*)?$/.test(url.pathname))
           return next()
         const send = (status: number, data: unknown) => {
           res.statusCode = status
@@ -92,26 +91,21 @@ export function orderMockPlugin(scenario = 'normal'): Plugin {
         if (failure) return send(failure, null)
         const data = scenario === 'empty' ? [] : orders
         if (url.pathname !== '/api/orders') {
-          const detail = data.find((o) => o.id === url.pathname.split('/').pop())
+          const detail = data.find((o) => o.orderNo === url.pathname.split('/').pop())
           return send(detail ? 200 : 404, scenario === 'malformed' ? {} : detail || null)
         }
-        const pageNum = Number(url.searchParams.get('pageNum') || 1)
-        const pageSize = Number(url.searchParams.get('pageSize') || 5)
         const status = url.searchParams.get('status')
-        if (
-          !Number.isSafeInteger(pageNum) ||
-          pageNum < 1 ||
-          pageSize !== 5 ||
-          (status && !statuses.includes(status as OrderStatus))
-        )
-          return send(400, null)
-        const filtered = data.filter((o) => !status || o.status === status)
-        return send(200, {
-          list: scenario === 'malformed' ? null : filtered.slice((pageNum - 1) * 5, pageNum * 5),
-          total: filtered.length,
-          pageNum,
-          pageSize,
-        })
+        if (status && !statuses.includes(status as OrderStatus)) return send(400, null)
+        const filtered = data
+          .filter((o) => !status || o.status === status)
+          .map(({ orderNo, status, createdAt, payableAmountFen, items }) => ({
+            orderNo,
+            status,
+            createdAt,
+            payableAmountFen,
+            items,
+          }))
+        return send(200, scenario === 'malformed' ? {} : filtered)
       })
     },
   }

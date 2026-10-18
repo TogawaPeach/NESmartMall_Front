@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { LocationQueryRaw } from 'vue-router'
-import type { Order } from '@/types/order'
+import type { OrderSummary } from '@/types/order'
 import { formatOrderTime, orderStatusInfo } from '@/constants/orderStatus'
 import { formatPriceFen } from '@/utils/price'
 import OrderItems from './OrderItems.vue'
 import OrderActions from './OrderActions.vue'
 
-defineProps<{ order: Order; listQuery: LocationQueryRaw }>()
+defineProps<{ order: OrderSummary; listQuery: LocationQueryRaw }>()
 </script>
 
 <template>
@@ -25,13 +25,12 @@ defineProps<{ order: Order; listQuery: LocationQueryRaw }>()
     <OrderItems :items="order.items" />
     <footer class="order-card-footer">
       <div class="order-card-total">
-        <span>{{ order.paidAmountFen === null ? '应付金额' : '实付金额' }}</span
-        ><strong>¥{{ formatPriceFen(order.paidAmountFen ?? order.payableAmountFen) }}</strong>
+        <span>订单金额</span><strong>¥{{ formatPriceFen(order.payableAmountFen) }}</strong>
       </div>
       <div class="order-card-links">
         <RouterLink
           class="order-detail-link"
-          :to="{ name: 'order-detail', params: { id: order.id }, query: listQuery }"
+          :to="{ name: 'order-detail', params: { orderNo: order.orderNo }, query: listQuery }"
           :aria-label="`查看订单 ${order.orderNo} 详情`"
           >查看详情 <span aria-hidden="true">→</span></RouterLink
         >

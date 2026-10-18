@@ -10,7 +10,7 @@
 
 首页组件位于 `src/components/storefront/`，页面位于 `src/views/HomeView.vue`，查询状态位于 `src/composables/useHomeProducts.ts`。订单、购物车已有独立页面，接口及开发模拟边界见文末。
 
-用户入口打开账号密码登录弹窗，提交 `POST /api/auth/login`，JSON body 为 `{ "account": "账号", "password": "密码" }`。仅当业务 `code` 为 `200` 且返回完整的 `accessToken`、`tokenType: "Bearer"`、`expiresIn` 和用户信息时建立登录状态；登录成功关闭弹窗并留在当前页面。注册表单提交 `POST /api/auth/register`，仅发送 account、nickname、password、role；注册成功直接使用响应中的 token 和用户信息建立同样的会话，无需再次登录，详见 [注册交接](docs/requirements/注册功能需求与前端实现交接.md)。入口保留用户图标，桌面显示昵称，点击可查看昵称、账号和退出登录。登录会话存入同源标签页共享的 `localStorage`，刷新、新标签页及浏览器重新打开时，未过期的会话均可恢复；到期或退出时清理，不保存密码。退出登录目前清理前端会话，不调用未提供的后端注销接口。找回密码和个人中心尚未接入。
+用户入口打开账号密码登录弹窗，提交 `POST /api/auth/login`，JSON body 为 `{ "account": "账号", "password": "密码" }`。仅当业务 `code` 为 `200` 且返回完整的 `accessToken`、`tokenType: "Bearer"`、`expiresIn` 和用户信息时建立登录状态；登录成功关闭弹窗并留在当前页面。注册表单提交 `POST /api/auth/register`，注册表单仅填写手机号账号、昵称和密码，不提供商家选择；API 仅发送 account、nickname、password、role，其中 role 固定为数字 1（普通用户）；注册成功直接使用响应中的 token 和用户信息建立同样的会话，无需再次登录，详见 [注册交接](docs/requirements/注册功能需求与前端实现交接.md)。入口保留用户图标，桌面显示昵称，点击可查看昵称、账号和退出登录。登录会话存入同源标签页共享的 `localStorage`，刷新、新标签页及浏览器重新打开时，未过期的会话均可恢复；到期或退出时清理，不保存密码。退出登录目前清理前端会话，不调用未提供的后端注销接口。找回密码和个人中心尚未接入。
 
 共享 `http` 请求层统一处理 Authorization：只要当前会话 token 未过期，首页等公开接口、分页/搜索及登录接口都自动携带 `Authorization: Bearer <accessToken>`；匿名或过期时不携带。范围按 Axios 最终请求地址判断，仅信任同源 `/api` 路径及配置的 `VITE_API_BASE_URL` 的同源同路径前缀（按路径段匹配），支持相对、绝对及协议相对地址；第三方地址、其他路径以及请求临时覆盖到未配置的后端均不携带会话 token。业务组件不拼接认证头，URL 和业务 body 不追加 token 或用户身份。
 
@@ -100,11 +100,11 @@ VITE_CART_MOCK=true VITE_CART_MOCK_SCENARIO=normal npm run dev
 
 ## 订单页面
 
-顶部「我的订单」在当前标签页进入 `/orders`，未登录点击先打开现有登录弹窗，成功后继续进入。直接访问未登录页面显示引导；退出、过期及换账号立即清空订单。列表每页 5 笔，支持全部、待付款、待发货、待收货、已完成、已取消筛选，筛选与页码保存在 URL。点击查看详情进入 `/orders/:id`，返回时保留筛选与页码。
+顶部「我的订单」在当前标签页进入 `/orders`，未登录点击先打开现有登录弹窗，成功后继续进入。直接访问未登录页面显示引导；退出、过期及换账号立即清空订单。列表一次展示全部订单，支持全部、待付款、待发货、待收货、已完成、已取消筛选，筛选状态保存在 URL。列表使用独立摘要类型，以 orderNo 标识订单，不要求或保留订单主表 id；只要求卡片字段和 items，订单金额取 payableAmountFen；支付时间、收货人、物流等仍由详情接口提供。点击查看详情按订单号 orderNo 进入 `/orders/:orderNo`，请求 `/api/orders/{orderNo}`，返回时保留筛选；不再按内部 id 查询。
 
 详情显示交易进度、收货及物流信息、商品成交快照和金额明细；手机号脱敏，未付款与 0 元实付分开。支付、取消和确认收货按钮暂未开放，不发送交易写请求。购物车已支持独立的前端小票结算演示，真实下单和支付仍未接入。
 
-查询草案为 `GET /api/orders?status=...&pageNum=1&pageSize=5` 和 `GET /api/orders/:id`，复用统一 Bearer 客户端，不传用户 ID；后端尚待实现与联调。未启用模拟时显示真实接口的未开放或失败状态，不自动回退演示订单。
+查询草案为 `GET /api/orders`（可选 `status` 筛选，不传分页参数，成功响应 `data` 直接为订单数组，订单数量取 `data.length`；不兼容旧 list/total 包装）和 `GET /api/orders/:orderNo`，复用统一 Bearer 客户端，不传用户 ID；列表已按真实接口的卡片字段适配并完成五笔订单联调；详情后端仍待实现。未启用模拟时显示真实接口的未开放或失败状态，不自动回退演示订单。
 
 开发模拟（仍需有效登录会话）：
 
@@ -112,7 +112,7 @@ VITE_CART_MOCK=true VITE_CART_MOCK_SCENARIO=normal npm run dev
 VITE_ORDER_MOCK=true npm run dev
 ```
 
-可加 `VITE_ORDER_MOCK_SCENARIO=empty` 验证空态；另支持 `normal`（默认，7 笔覆盖全部状态及分页）、`forbidden`、`unavailable`、`error`、`malformed`。改环境变量后重启服务。模拟页面有明确标记，中间件与订单样本仅供 Vite serve 使用，不进入生产构建。
+可加 `VITE_ORDER_MOCK_SCENARIO=empty` 验证空态；另支持 `normal`（默认，7 笔覆盖全部状态及全量列表）、`forbidden`、`unavailable`、`error`、`malformed`。改环境变量后重启服务。模拟页面有明确标记，中间件与订单样本仅供 Vite serve 使用，不进入生产构建。
 
 完整需求与接口草案保存在本地 Require 的《订单页面需求与前端开发交接.md》。商城促销导航仅保留「限时秒杀」，活动功能暂未开放。
 

@@ -455,10 +455,9 @@ test('login sends JSON credentials in the POST body without changing the passwor
   assert.equal(data.accessToken, 'test-access-token')
 })
 
-for (const role of [1, 0]) {
-  test(`registration submits only the agreed fields with numeric role ${role} and returns authentication data`, async () => {
+for (const extra of [{}, { role: 0, status: 0 }]) {
+  test(`registration always submits customer role even with extra fields ${JSON.stringify(extra)}`, async () => {
     const payload = response()
-    payload.data.user.role = role
     http.defaults.adapter = async (config) => {
       assert.equal(config.method, 'post')
       assert.equal(config.url, '/api/auth/register')
@@ -467,7 +466,7 @@ for (const role of [1, 0]) {
         account: '13800138000',
         nickname: '测绘小助手',
         password: ' password ',
-        role,
+        role: 1,
       })
       return adapter(payload)(config)
     }
@@ -475,8 +474,7 @@ for (const role of [1, 0]) {
       account: ' 13800138000 ',
       nickname: ' 测绘小助手 ',
       password: ' password ',
-      role,
-      status: 0,
+      ...extra,
     })
     assert.deepEqual(data, payload.data)
     assert.equal(store.isAuthenticated, false)
@@ -484,45 +482,42 @@ for (const role of [1, 0]) {
   })
 }
 
-for (const role of [1, 0]) {
-  test(`sign-up for role ${role} persists the returned session and authorizes requests without a login call`, async () => {
-    const payload = response()
-    payload.data.user = { id: '4', account: '13800138000', nickname: '测试用户', role }
-    let calls = 0
-    http.defaults.adapter = async (config) => {
-      calls++
-      assert.equal(config.url, '/api/auth/register')
-      return adapter(payload)(config)
-    }
-    const startedAt = Date.now()
-    assert.equal(
-      await store.signUp({
-        account: '13800138000',
-        nickname: '测试用户',
-        password: 'secret',
-        role,
-      }),
-      true,
-    )
-    assert.equal(calls, 1)
-    assert.equal(store.isAuthenticated, true)
-    assert.deepEqual(store.user, payload.data.user)
-    assert.equal(store.displayName, '测试用户')
-    const saved = JSON.parse(entries.get(sessionKey))
-    assert.equal(saved.accessToken, payload.data.accessToken)
-    assert.ok(saved.expiresAt >= startedAt + payload.data.expiresIn * 1000)
-    assert.ok(saved.expiresAt <= Date.now() + payload.data.expiresIn * 1000)
-    assert.equal(JSON.stringify(saved).includes('secret'), false)
-    const restored = createPeer()
-    assert.equal(restored.isAuthenticated, true)
-    assert.deepEqual(restored.user, payload.data.user)
-    http.defaults.adapter = async (config) => {
-      assert.equal(config.headers.get('Authorization'), `Bearer ${payload.data.accessToken}`)
-      return adapter({ code: 200 })(config)
-    }
-    await http.get('/api/products')
-  })
-}
+test('sign-up persists the customer session and authorizes requests without a login call', async () => {
+  const payload = response()
+  payload.data.user = { id: '4', account: '13800138000', nickname: '测试用户', role: 1 }
+  let calls = 0
+  http.defaults.adapter = async (config) => {
+    calls++
+    assert.equal(config.url, '/api/auth/register')
+    return adapter(payload)(config)
+  }
+  const startedAt = Date.now()
+  assert.equal(
+    await store.signUp({
+      account: '13800138000',
+      nickname: '测试用户',
+      password: 'secret',
+    }),
+    true,
+  )
+  assert.equal(calls, 1)
+  assert.equal(store.isAuthenticated, true)
+  assert.deepEqual(store.user, payload.data.user)
+  assert.equal(store.displayName, '测试用户')
+  const saved = JSON.parse(entries.get(sessionKey))
+  assert.equal(saved.accessToken, payload.data.accessToken)
+  assert.ok(saved.expiresAt >= startedAt + payload.data.expiresIn * 1000)
+  assert.ok(saved.expiresAt <= Date.now() + payload.data.expiresIn * 1000)
+  assert.equal(JSON.stringify(saved).includes('secret'), false)
+  const restored = createPeer()
+  assert.equal(restored.isAuthenticated, true)
+  assert.deepEqual(restored.user, payload.data.user)
+  http.defaults.adapter = async (config) => {
+    assert.equal(config.headers.get('Authorization'), `Bearer ${payload.data.accessToken}`)
+    return adapter({ code: 200 })(config)
+  }
+  await http.get('/api/products')
+})
 
 test('registration rejects missing or invalid session data without replacing an existing session', async () => {
   await signIn('existing-token')
@@ -548,7 +543,6 @@ test('registration rejects missing or invalid session data without replacing an 
         account: '13800138000',
         nickname: '测试用户',
         password: 'secret',
-        role: 1,
       }),
       /注册响应格式异常/,
     )
@@ -570,7 +564,6 @@ for (const action of ['abort', 'logout', 'another-tab-login']) {
         account: '13800138000',
         nickname: '测试用户',
         password: 'secret',
-        role: 1,
       },
       { signal: controller.signal },
     )
@@ -594,7 +587,7 @@ test('invalid registration fields never reach the backend', async () => {
     calls++
     return adapter({ code: 200, data: null })(config)
   }
-  const valid = { account: '13800138000', nickname: '测试昵称', password: 'secret', role: 1 }
+  const valid = { account: '13800138000', nickname: '测试昵称', password: 'secret' }
   for (const change of [
     { account: '' },
     { account: '1380013800' },
@@ -603,15 +596,13 @@ test('invalid registration fields never reach the backend', async () => {
     { nickname: '字'.repeat(65) },
     { password: '' },
     { password: '   ' },
-    { role: 2 },
-    { role: '1' },
   ])
     await assert.rejects(register({ ...valid, ...change }))
   assert.equal(calls, 0)
 })
 
 test('registration displays duplicate-account business and HTTP errors', async () => {
-  const credentials = { account: '13800138000', nickname: '测试昵称', password: 'secret', role: 1 }
+  const credentials = { account: '13800138000', nickname: '测试昵称', password: 'secret' }
   http.defaults.adapter = adapter({ code: 409, message: '该手机号已注册', data: null })
   await assert.rejects(register(credentials), /该手机号已注册/)
   http.defaults.adapter = async (config) => {
@@ -623,7 +614,7 @@ test('registration displays duplicate-account business and HTTP errors', async (
 })
 
 test('registration rejects malformed success and reports network errors', async () => {
-  const credentials = { account: '13800138000', nickname: '测试昵称', password: 'secret', role: 1 }
+  const credentials = { account: '13800138000', nickname: '测试昵称', password: 'secret' }
   for (const payload of [null, {}, { code: '200' }]) {
     http.defaults.adapter = adapter(payload)
     await assert.rejects(register(credentials), /注册失败/)
@@ -638,7 +629,7 @@ test('a failed registration cannot clear an existing login', async () => {
   await signIn()
   http.defaults.adapter = adapter({ code: 401, message: '注册失败', data: null })
   await assert.rejects(
-    register({ account: '13800138000', nickname: '测试昵称', password: 'secret', role: 1 }),
+    register({ account: '13800138000', nickname: '测试昵称', password: 'secret' }),
   )
   assert.equal(store.isAuthenticated, true)
 })
@@ -648,7 +639,7 @@ test('cancelled registration remains cancelled', async () => {
   controller.abort()
   await assert.rejects(
     register(
-      { account: '13800138000', nickname: '测试昵称', password: 'secret', role: 1 },
+      { account: '13800138000', nickname: '测试昵称', password: 'secret' },
       { signal: controller.signal },
     ),
     { code: 'ERR_CANCELED' },

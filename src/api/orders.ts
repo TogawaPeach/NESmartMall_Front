@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { http } from './http'
-import { isOrderStatus, ORDER_PAGE_SIZE } from '@/constants/orderStatus'
-import type { Order, OrderItem, OrderLoadState, OrderPage, OrderStatus } from '@/types/order'
+import { isOrderStatus } from '@/constants/orderStatus'
+import type { Order, OrderItem, OrderLoadState, OrderStatus, OrderSummary } from '@/types/order'
 
 export class OrderResponseError extends Error {
   constructor(message = '订单响应格式异常') {
@@ -25,6 +25,11 @@ function text(value: unknown): string {
 }
 function id(value: unknown): string {
   if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) throw new OrderResponseError()
+  return value
+}
+function orderNumber(value: unknown): string {
+  if (typeof value !== 'string' || value.length > 64 || !/^JW[1-9]\d*$/.test(value))
+    throw new OrderResponseError()
   return value
 }
 function count(value: unknown, min = 0): number {
@@ -92,28 +97,39 @@ function readItem(value: unknown): OrderItem {
     quantity: count(v.quantity, 1),
   }
 }
-function readOrder(value: unknown): Order {
+function readOrderSummary(value: unknown): OrderSummary {
   const v = record(value)
   if (!isOrderStatus(v.status) || !Array.isArray(v.items) || !v.items.length)
     throw new OrderResponseError()
   const items = v.items.map(readItem)
   if (new Set(items.map((item) => item.id)).size !== items.length) throw new OrderResponseError()
+  const goods = items.reduce(
+    (sum, item) => sum + BigInt(item.unitPriceFen) * BigInt(item.quantity),
+    0n,
+  )
+  if (goods > BigInt(Number.MAX_SAFE_INTEGER)) throw new OrderResponseError()
+  return {
+    orderNo: orderNumber(v.orderNo),
+    status: v.status,
+    createdAt: time(v.createdAt),
+    items,
+    payableAmountFen: count(v.payableAmountFen),
+  }
+}
+function readOrder(value: unknown): Order {
+  const v = record(value)
+  const summary = readOrderSummary(v)
   const recipient = record(v.recipient)
   const logistics = v.logistics === null ? null : record(v.logistics)
   const result: Order = {
-    id: id(v.id),
-    orderNo: text(v.orderNo),
-    status: v.status,
-    createdAt: time(v.createdAt),
+    ...summary,
     paidAt: v.paidAt === null ? null : time(v.paidAt),
     shippedAt: v.shippedAt === null ? null : time(v.shippedAt),
     completedAt: v.completedAt === null ? null : time(v.completedAt),
     cancelledAt: v.cancelledAt === null ? null : time(v.cancelledAt),
-    items,
     goodsAmountFen: count(v.goodsAmountFen),
     shippingFeeFen: count(v.shippingFeeFen),
     discountAmountFen: count(v.discountAmountFen),
-    payableAmountFen: count(v.payableAmountFen),
     paidAmountFen: v.paidAmountFen === null ? null : count(v.paidAmountFen),
     recipient: {
       name: text(recipient.name),
@@ -124,7 +140,7 @@ function readOrder(value: unknown): Order {
       ? { carrier: text(logistics.carrier), trackingNo: text(logistics.trackingNo) }
       : null,
   }
-  const goods = items.reduce(
+  const goods = summary.items.reduce(
     (sum, item) => sum + BigInt(item.unitPriceFen) * BigInt(item.quantity),
     0n,
   )
@@ -195,44 +211,23 @@ async function request(
   }
 }
 export async function queryOrders(
-  query: { status?: OrderStatus; pageNum: number },
+  query: { status?: OrderStatus } = {},
   options: { signal?: AbortSignal } = {},
-): Promise<OrderPage> {
-  count(query.pageNum, 1)
+): Promise<OrderSummary[]> {
   if (query.status !== undefined && !isOrderStatus(query.status)) throw new OrderResponseError()
-  const params = {
-    ...(query.status ? { status: query.status } : {}),
-    pageNum: query.pageNum,
-    pageSize: ORDER_PAGE_SIZE,
-  }
-  const data = record(await request('/api/orders', false, { ...options, params }))
-  if (!Array.isArray(data.list)) throw new OrderResponseError()
-  const list = data.list.map(readOrder),
-    total = count(data.total),
-    pageNum = count(data.pageNum, 1),
-    pageSize = count(data.pageSize, 1)
-  const offset = BigInt(pageNum - 1) * BigInt(ORDER_PAGE_SIZE)
-  const expected = Number(
-    BigInt(total) > offset
-      ? BigInt(total) - offset < BigInt(ORDER_PAGE_SIZE)
-        ? BigInt(total) - offset
-        : BigInt(ORDER_PAGE_SIZE)
-      : 0n,
-  )
-  if (
-    pageNum !== query.pageNum ||
-    pageSize !== ORDER_PAGE_SIZE ||
-    list.length !== expected ||
-    new Set(list.map((o) => o.id)).size !== list.length
-  )
+  const params = query.status ? { status: query.status } : {}
+  const data = await request('/api/orders', false, { ...options, params })
+  if (!Array.isArray(data)) throw new OrderResponseError()
+  const orders = data.map(readOrderSummary)
+  if (new Set(orders.map((order) => order.orderNo)).size !== orders.length)
     throw new OrderResponseError()
-  return { list, total, pageNum, pageSize }
+  return orders
 }
 export async function queryOrder(
-  orderId: string,
+  orderNo: string,
   options: { signal?: AbortSignal } = {},
 ): Promise<Order> {
-  const result = readOrder(await request(`/api/orders/${id(orderId)}`, true, options))
-  if (result.id !== orderId) throw new OrderResponseError()
+  const result = readOrder(await request(`/api/orders/${orderNumber(orderNo)}`, true, options))
+  if (result.orderNo !== orderNo) throw new OrderResponseError()
   return result
 }

@@ -11,30 +11,25 @@ export interface OrderItem {
   quantity: number
 }
 
-export interface Order {
-  id: string
+export interface OrderSummary {
   orderNo: string
   status: OrderStatus
   createdAt: string
+  items: OrderItem[]
+  payableAmountFen: number
+}
+
+export interface Order extends OrderSummary {
   paidAt: string | null
   shippedAt: string | null
   completedAt: string | null
   cancelledAt: string | null
-  items: OrderItem[]
   goodsAmountFen: number
   shippingFeeFen: number
   discountAmountFen: number
-  payableAmountFen: number
   paidAmountFen: number | null
   recipient: { name: string; phone: string; address: string }
   logistics: { carrier: string; trackingNo: string } | null
-}
-
-export interface OrderPage {
-  list: Order[]
-  total: number
-  pageNum: number
-  pageSize: number
 }
 
 export type OrderLoadState =

@@ -1,15 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import {
-  ElAlert,
-  ElButton,
-  ElDialog,
-  ElForm,
-  ElFormItem,
-  ElInput,
-  ElRadio,
-  ElRadioGroup,
-} from 'element-plus'
+import { ElAlert, ElButton, ElDialog, ElForm, ElFormItem, ElInput } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
 import { Lock, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
@@ -20,7 +11,7 @@ defineProps<{ description?: string }>()
 const auth = useAuthStore()
 const mode = ref<'login' | 'register'>('login')
 const isRegister = computed(() => mode.value === 'register')
-const form = reactive<RegisterCredentials>({ account: '', nickname: '', password: '', role: 1 })
+const form = reactive<RegisterCredentials>({ account: '', nickname: '', password: '' })
 const formRef = ref<FormInstance>()
 const accountInput = ref<InstanceType<typeof ElInput>>()
 const submitting = ref(false)
@@ -58,7 +49,6 @@ const registrationRules: FormRules = {
     },
   ],
   password: [{ required: true, whitespace: true, message: '请输入密码', trigger: 'blur' }],
-  role: [{ required: true, type: 'number', message: '请选择账户类型', trigger: 'change' }],
 }
 
 function clearMessages() {
@@ -71,7 +61,6 @@ async function switchMode() {
   mode.value = isRegister.value ? 'login' : 'register'
   form.password = ''
   form.nickname = ''
-  form.role = 1
   clearMessages()
   await nextTick()
   formRef.value?.clearValidate()
@@ -87,7 +76,6 @@ function reset() {
   form.account = ''
   form.nickname = ''
   form.password = ''
-  form.role = 1
   clearMessages()
   formRef.value?.clearValidate()
 }
@@ -197,7 +185,7 @@ async function submit() {
           v-model="form.nickname"
           name="nickname"
           autocomplete="nickname"
-          :placeholder="form.role === 0 ? '请输入昵称（作为店铺名）' : '请输入昵称'"
+          placeholder="请输入昵称"
           :prefix-icon="User"
           :disabled="submitting"
           @input="clearMessages"
@@ -216,17 +204,6 @@ async function submit() {
           :disabled="submitting"
           @input="clearMessages"
         />
-      </ElFormItem>
-      <ElFormItem v-if="isRegister" label="账户类型" prop="role">
-        <ElRadioGroup
-          v-model="form.role"
-          aria-label="账户类型"
-          :disabled="submitting"
-          @change="clearMessages"
-        >
-          <ElRadio :value="1">用户</ElRadio>
-          <ElRadio :value="0">商家</ElRadio>
-        </ElRadioGroup>
       </ElFormItem>
       <ElAlert
         v-if="errorMessage"
