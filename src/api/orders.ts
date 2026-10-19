@@ -157,10 +157,14 @@ function readItem(value: unknown): OrderItem {
     quantity: count(v.quantity, 1),
   }
 }
-function readPaymentFields(v: Record<string, unknown>, required = false): Partial<OrderSummary> {
+function readPaymentFields(v: Record<string, unknown>): Partial<OrderSummary> {
   const fields = ['payExpireAt', 'serverTime', 'canPay', 'displayStatus', 'cancelReason']
-  if (!required && fields.every((key) => v[key] === undefined)) return {}
+  if (fields.every((key) => v[key] === undefined)) return {}
   const payExpireAt = time(v.payExpireAt)
+  if (Date.parse(payExpireAt) !== Date.parse(time(v.createdAt)) + 15 * 60_000)
+    throw new OrderResponseError()
+  // The current backend supplies the deadline before the remaining eligibility fields.
+  if (fields.slice(1).every((key) => v[key] === undefined)) return { payExpireAt }
   const serverTime = time(v.serverTime)
   if (
     typeof v.canPay !== 'boolean' ||
@@ -173,8 +177,7 @@ function readPaymentFields(v: Record<string, unknown>, required = false): Partia
     v.canPay !== (v.status === 'PENDING_PAYMENT' && !expired) ||
     v.displayStatus !==
       (v.status === 'PENDING_PAYMENT' && expired ? 'PAYMENT_EXPIRED' : v.status) ||
-    (v.status !== 'CANCELLED' && v.cancelReason !== null) ||
-    Date.parse(payExpireAt) !== Date.parse(time(v.createdAt)) + 15 * 60_000
+    (v.status !== 'CANCELLED' && v.cancelReason !== null)
   )
     throw new OrderResponseError()
   return {
@@ -388,7 +391,8 @@ async function writeOrder(
   if (body.code !== 200) throw writeRejection(body.code)
   if (body.message !== 'OK') throw new OrderResponseError()
   const value = record(body.data)
-  readPaymentFields(value, true)
+  // Legacy responses still carry the order number and amount needed by the dialog.
+  // readOrder validates eligibility when present; missing eligibility cannot enable payment.
   const order = readOrder(value)
   if (
     order.recipient.name.length > 100 ||

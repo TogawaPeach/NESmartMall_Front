@@ -228,6 +228,50 @@ test('creation locks duplicate clicks; closing and selection cleanup preserve fr
   assert.equal(payment.confirmVisible.value, true)
 })
 
+test('creation without payment eligibility fields opens confirmation with server order number and amount', async () => {
+  const { payment } = await ready()
+  const data = snapshot({
+    orderNo: 'JW1980123456789012300',
+    payableAmountFen: 990,
+    shippingFeeFen: 990,
+  })
+  for (const key of ['payExpireAt', 'serverTime', 'canPay', 'displayStatus', 'cancelReason'])
+    delete data[key]
+  respondOrder(data)
+
+  await payment.requestConfirmation()
+
+  assert.equal(payment.stage.value, 'created')
+  assert.equal(payment.confirmVisible.value, true)
+  assert.equal(payment.order.value.orderNo, 'JW1980123456789012300')
+  assert.equal(payment.order.value.payableAmountFen, 990)
+  assert.equal(payment.canPay.value, false)
+  assert.match(payment.paymentNotice.value, /付款信息暂未就绪/)
+  await payment.confirm()
+  assert.equal(requests.length, 1)
+})
+
+test('current backend response with only payExpireAt opens confirmation instead of unknown result', async () => {
+  const { payment } = await ready()
+  const data = snapshot({
+    orderNo: 'JW1980123456789012301',
+    shippingFeeFen: 14700,
+    payableAmountFen: 14700,
+  })
+  for (const key of ['serverTime', 'canPay', 'displayStatus', 'cancelReason']) delete data[key]
+  respondOrder(data)
+
+  await payment.requestConfirmation()
+
+  assert.equal(payment.stage.value, 'created')
+  assert.equal(payment.confirmVisible.value, true)
+  assert.equal(payment.order.value.orderNo, 'JW1980123456789012301')
+  assert.equal(payment.order.value.payableAmountFen, 14700)
+  assert.equal(payment.order.value.payExpireAt, data.payExpireAt)
+  assert.equal(payment.error.value, '')
+  assert.equal(payment.canPay.value, false)
+})
+
 for (const failure of ['network', 'timeout', '500', 'malformed']) {
   test(`unknown create ${failure} cannot replay after closing and reopening`, async () => {
     const { payment, visible } = await ready()
