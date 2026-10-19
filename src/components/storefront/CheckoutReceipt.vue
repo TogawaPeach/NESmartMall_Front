@@ -1,17 +1,26 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { ElDialog } from 'element-plus'
+import { computed } from 'vue'
+import { ElAlert, ElButton, ElDialog } from 'element-plus'
 import type { CartItem } from '@/types/cart'
 import { formatPriceFen } from '@/utils/price'
 import { cartSubtotal } from '@/utils/cart'
+import { useCheckoutPayment } from '@/composables/useCheckoutPayment'
 
 const visible = defineModel<boolean>({ required: true })
-defineProps<{ items: CartItem[]; totalFen: number; quantity: number }>()
-const paid = ref(false)
-
-watch(visible, (opened) => {
-  if (opened) paid.value = false
-})
+const props = defineProps<{ items: CartItem[]; totalFen: number; quantity: number }>()
+const {
+  confirmVisible,
+  loading,
+  error,
+  paid,
+  quoteItems,
+  totalFen: confirmedTotalFen,
+  requestConfirmation,
+  cancel,
+  confirm,
+} = useCheckoutPayment(visible, () => props.items)
+const displayItems = computed(() => (quoteItems.value.length ? quoteItems.value : props.items))
+const displayTotalFen = computed(() => confirmedTotalFen.value ?? props.totalFen)
 </script>
 
 <template>
@@ -51,7 +60,7 @@ watch(visible, (opened) => {
         <span>商品明细</span>
       </div>
       <ul class="receipt-items" aria-label="本次结算商品" tabindex="0">
-        <li v-for="item in items" :key="item.cartItemId" class="receipt-item">
+        <li v-for="item in displayItems" :key="item.cartItemId" class="receipt-item">
           <div class="receipt-item-description">
             <span class="receipt-item-name">{{ item.name }}</span>
             <span class="receipt-item-meta">
@@ -66,9 +75,9 @@ watch(visible, (opened) => {
       <div class="receipt-total">
         <div>
           <span>{{ paid ? '演示支付金额' : '合计金额' }}</span
-          ><small>共 {{ items.length }} 款 / {{ quantity }} 件</small>
+          ><small>共 {{ displayItems.length }} 款 / {{ quantity }} 件</small>
         </div>
-        <strong><span>¥</span>{{ formatPriceFen(totalFen) }}</strong>
+        <strong><span>¥</span>{{ formatPriceFen(displayTotalFen) }}</strong>
       </div>
 
       <div class="receipt-payment" role="status" aria-live="polite">
@@ -90,10 +99,11 @@ watch(visible, (opened) => {
       <button
         class="receipt-pay-button"
         type="button"
-        @click="paid ? (visible = false) : (paid = true)"
+        :disabled="loading || confirmVisible"
+        @click="paid ? (visible = false) : requestConfirmation()"
       >
-        {{ paid ? '完成，继续逛逛' : '模拟支付' }}
-        <span v-if="!paid">¥{{ formatPriceFen(totalFen) }}</span>
+        {{ paid ? '完成，继续逛逛' : loading ? '正在查询价格…' : '模拟支付' }}
+        <span v-if="!paid">¥{{ formatPriceFen(displayTotalFen) }}</span>
         <span aria-hidden="true">↗</span>
       </button>
       <p v-if="!paid" class="receipt-disclaimer">仅作支付演示，不会生成订单或实际扣款</p>
@@ -102,9 +112,58 @@ watch(visible, (opened) => {
       </div>
     </div>
   </ElDialog>
+  <ElDialog
+    :model-value="confirmVisible"
+    title="确认模拟支付"
+    width="min(420px, calc(100vw - 32px))"
+    align-center
+    append-to-body
+    destroy-on-close
+    @update:model-value="!paid && cancel()"
+  >
+    <div :aria-busy="loading" role="status" aria-live="polite">
+      <p v-if="loading">正在向服务器查询所选商品的最新价格，请稍候…</p>
+      <ElAlert v-else-if="error" :title="error" type="error" show-icon :closable="false" />
+      <p v-else-if="confirmedTotalFen !== null" class="payment-confirmation">
+        这些商品总价为 <strong>¥{{ formatPriceFen(confirmedTotalFen) }}</strong
+        >，是否支付？
+      </p>
+    </div>
+    <p class="payment-demo-note">本次为模拟支付，确认后直接显示支付成功，不会实际扣款。</p>
+    <template #footer>
+      <ElButton @click="cancel">否，暂不支付</ElButton>
+      <ElButton v-if="error" type="primary" @click="requestConfirmation">重新查询</ElButton>
+      <ElButton
+        v-else
+        type="primary"
+        :disabled="loading || confirmedTotalFen === null"
+        @click="confirm"
+      >
+        是，确认支付
+      </ElButton>
+    </template>
+  </ElDialog>
 </template>
 
 <style scoped>
+.payment-confirmation {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.payment-confirmation strong {
+  color: #454b3d;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.payment-demo-note {
+  color: #756a59;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.receipt-pay-button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
 .receipt-topline {
   display: flex;
   justify-content: flex-end;
