@@ -7,6 +7,7 @@ import OrderItems from './OrderItems.vue'
 import OrderActions from './OrderActions.vue'
 
 defineProps<{ order: OrderSummary; listQuery: LocationQueryRaw }>()
+const emit = defineEmits<{ confirmed: [] }>()
 </script>
 
 <template>
@@ -34,7 +35,12 @@ defineProps<{ order: OrderSummary; listQuery: LocationQueryRaw }>()
           :aria-label="`查看订单 ${order.orderNo} 详情`"
           >查看详情 <span aria-hidden="true">→</span></RouterLink
         >
-        <OrderActions :status="order.status" />
+        <OrderActions
+          :order="order"
+          :status="order.status"
+          :order-no="order.orderNo"
+          @confirmed="emit('confirmed')"
+        />
       </div>
     </footer>
   </article>

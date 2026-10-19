@@ -1,9 +1,25 @@
 import type { Plugin } from 'vite'
 import type { Order, OrderStatus } from '../src/types/order.ts'
 
-/** Local, read-only fixtures, installed only by explicit Vite serve configuration. */
-export function orderMockPlugin(scenario = 'normal'): Plugin {
-  if (!['normal', 'empty', 'forbidden', 'unavailable', 'error', 'malformed'].includes(scenario))
+/** Isolated local transactions, installed only by explicit Vite serve configuration. */
+export function orderMockPlugin(
+  scenario = 'normal',
+  options: { transactions?: boolean } = {},
+): Plugin {
+  if (
+    ![
+      'normal',
+      'empty',
+      'forbidden',
+      'unavailable',
+      'error',
+      'malformed',
+      'create-unknown',
+      'create-malformed',
+      'pay-unknown',
+      'expired',
+    ].includes(scenario)
+  )
     throw new Error(`未知订单模拟场景：${scenario}`)
   const statuses: OrderStatus[] = [
     'PENDING_PAYMENT',
@@ -70,39 +86,195 @@ export function orderMockPlugin(scenario = 'normal'): Plugin {
       logistics: shipped ? { trackingNo: `DEMO202610${day}000${index + 1}` } : null,
     }
   })
+  const sessions = new Map<string, Order[]>()
+  let sequence = 100
   return {
     name: 'local-order-mock',
     apply: 'serve',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const url = new URL(req.url || '/', 'http://localhost')
-        if (req.method !== 'GET' || !/^\/api\/orders(?:\/JW[1-9]\d*)?$/.test(url.pathname))
+        const detailMatch = /^\/api\/orders\/(JW[1-9]\d*)(\/pay)?$/.exec(url.pathname)
+        const creating = req.method === 'POST' && url.pathname === '/api/orders'
+        const paying = req.method === 'POST' && detailMatch?.[2] === '/pay'
+        if (
+          !creating &&
+          !paying &&
+          !(
+            req.method === 'GET' &&
+            (url.pathname === '/api/orders' || (detailMatch && !detailMatch[2]))
+          )
+        )
           return next()
         const send = (status: number, data: unknown) => {
           res.statusCode = status
           res.setHeader('Content-Type', 'application/json; charset=utf-8')
           res.setHeader('Cache-Control', 'no-store')
-          res.end(JSON.stringify({ code: status, message: '开发模拟订单', data }))
+          res.end(
+            JSON.stringify({
+              code: status,
+              message: status === 200 ? 'OK' : '开发模拟订单错误',
+              data,
+            }),
+          )
         }
         if (!/^Bearer \S+$/.test(req.headers.authorization || '')) return send(401, null)
         const failure = { forbidden: 403, unavailable: 503, error: 500 }[scenario as string]
         if (failure) return send(failure, null)
-        const data = scenario === 'empty' ? [] : orders
+        const authorization = req.headers.authorization!
+        if (!sessions.has(authorization))
+          sessions.set(authorization, structuredClone(scenario === 'empty' ? [] : orders))
+        const data = sessions.get(authorization)!
+        if ((creating || paying) && !options.transactions) return send(404, null)
+        const currentSnapshot = (order: Order) => {
+          if (!order.payExpireAt) return order // Existing fixtures intentionally cover legacy GET.
+          const expired = Date.now() >= Date.parse(order.payExpireAt)
+          return {
+            ...order,
+            serverTime: new Date().toISOString(),
+            canPay: order.status === 'PENDING_PAYMENT' && !expired,
+            displayStatus:
+              order.status === 'PENDING_PAYMENT' && expired ? 'PAYMENT_EXPIRED' : order.status,
+          }
+        }
+        if (creating) {
+          let raw = ''
+          req.on('data', (chunk: Buffer) => {
+            raw += chunk.toString()
+          })
+          req.on('end', () => {
+            try {
+              const input = JSON.parse(raw)
+              if (
+                Object.keys(input).sort().join(',') !== 'items,recipient' ||
+                !Array.isArray(input.items) ||
+                !input.items.length ||
+                !input.recipient ||
+                Object.keys(input.recipient).sort().join(',') !== 'address,name,phone' ||
+                ['name', 'phone', 'address'].some(
+                  (key) => typeof input.recipient[key] !== 'string' || !input.recipient[key].trim(),
+                )
+              )
+                return send(400, null)
+              const catalog: Record<string, { name: string; unitPriceFen: number }> = {
+                '9007199254740993123': {
+                  name: 'GNSS 接收机（模拟成交快照）',
+                  unitPriceFen: 134400,
+                },
+                '43': { name: '测量三脚架（模拟成交快照）', unitPriceFen: 39900 },
+                '44': { name: '配件赠品（模拟成交快照）', unitPriceFen: 0 },
+              }
+              const ids = new Set<string>()
+              const items = input.items.map(
+                (entry: { productId: string; quantity: number }, index: number) => {
+                  if (
+                    Object.keys(entry).sort().join(',') !== 'productId,quantity' ||
+                    !catalog[entry.productId] ||
+                    ids.has(entry.productId) ||
+                    !Number.isSafeInteger(entry.quantity) ||
+                    entry.quantity < 1 ||
+                    entry.quantity > 8
+                  )
+                    throw new Error('invalid mock intent')
+                  ids.add(entry.productId)
+                  return {
+                    id: String(++sequence + index),
+                    productId: entry.productId,
+                    ...catalog[entry.productId]!,
+                    model: null,
+                    coverUrl: null,
+                    quantity: entry.quantity,
+                  }
+                },
+              )
+              const goodsAmountFen = items.reduce(
+                (sum: number, item: { unitPriceFen: number; quantity: number }) =>
+                  sum + item.unitPriceFen * item.quantity,
+                0,
+              )
+              const created = Date.now() - (scenario === 'expired' ? 16 * 60_000 : 0)
+              const shippingFeeFen = goodsAmountFen === 0 ? 0 : 1200
+              const order: Order = {
+                orderNo: `JW${Date.now()}${++sequence}`,
+                status: 'PENDING_PAYMENT',
+                createdAt: new Date(created).toISOString(),
+                paidAt: null,
+                shippedAt: null,
+                completedAt: null,
+                cancelledAt: null,
+                items,
+                goodsAmountFen,
+                shippingFeeFen,
+                discountAmountFen: 0,
+                payableAmountFen: goodsAmountFen + shippingFeeFen,
+                paidAmountFen: null,
+                recipient: { ...input.recipient, phone: '138****0000' },
+                logistics: null,
+                payExpireAt: new Date(created + 15 * 60_000).toISOString(),
+                serverTime: new Date().toISOString(),
+                canPay: scenario !== 'expired',
+                displayStatus: scenario === 'expired' ? 'PAYMENT_EXPIRED' : 'PENDING_PAYMENT',
+                cancelReason: null,
+              }
+              data.unshift(order)
+              if (scenario === 'create-unknown') return send(500, null)
+              return send(200, scenario === 'create-malformed' ? {} : currentSnapshot(order))
+            } catch {
+              return send(400, null)
+            }
+          })
+          return
+        }
+        if (paying) {
+          const order = data.find((order) => order.orderNo === detailMatch[1])
+          if (!order) return send(404, null)
+          if (order.status === 'PENDING_PAYMENT') {
+            if (!order.payExpireAt || Date.now() >= Date.parse(order.payExpireAt))
+              return send(409, null)
+            order.status = 'PENDING_SHIPMENT'
+            order.paidAt = new Date().toISOString()
+            order.paidAmountFen = order.payableAmountFen
+          }
+          if (!['PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED'].includes(order.status))
+            return send(409, null)
+          if (scenario === 'pay-unknown') return send(500, null)
+          return send(200, currentSnapshot(order))
+        }
         if (url.pathname !== '/api/orders') {
           const detail = data.find((o) => o.orderNo === url.pathname.split('/').pop())
-          return send(detail ? 200 : 404, scenario === 'malformed' ? {} : detail || null)
+          return send(
+            detail ? 200 : 404,
+            scenario === 'malformed' ? {} : detail ? currentSnapshot(detail) : null,
+          )
         }
         const status = url.searchParams.get('status')
         if (status && !statuses.includes(status as OrderStatus)) return send(400, null)
         const filtered = data
           .filter((o) => !status || o.status === status)
-          .map(({ orderNo, status, createdAt, payableAmountFen, items }) => ({
-            orderNo,
-            status,
-            createdAt,
-            payableAmountFen,
-            items,
-          }))
+          .map((order) => {
+            const {
+              orderNo,
+              status,
+              createdAt,
+              payableAmountFen,
+              items,
+              payExpireAt,
+              serverTime,
+              canPay,
+              displayStatus,
+              cancelReason,
+            } = currentSnapshot(order)
+            return {
+              orderNo,
+              status,
+              createdAt,
+              payableAmountFen,
+              items,
+              ...(payExpireAt
+                ? { payExpireAt, serverTime, canPay, displayStatus, cancelReason }
+                : {}),
+            }
+          })
         return send(200, scenario === 'malformed' ? {} : filtered)
       })
     },

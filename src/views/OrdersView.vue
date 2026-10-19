@@ -47,10 +47,18 @@ const { data, state, status, changeStatus, retry, listQuery } = useOrders()
         {{ state === 'success' ? `共 ${data?.length} 笔订单` : '' }}
       </p>
       <template v-if="state === 'success' && data">
-        <OrderCard v-for="order in data" :key="order.orderNo" :order="order" :list-query="listQuery" />
+        <OrderCard
+          v-for="order in data"
+          :key="order.orderNo"
+          :order="order"
+          :list-query="listQuery"
+          @confirmed="retry"
+        />
       </template>
       <OrderPageState v-else :state="state" :filtered="!!status" @retry="retry" />
     </section>
-    <p v-if="state === 'success'" class="order-service-note">支付、取消订单和确认收货暂未开放。</p>
+    <p v-if="state === 'success'" class="order-service-note">
+      模拟支付不会实际扣款；取消订单暂未开放。
+    </p>
   </OrderPageShell>
 </template>

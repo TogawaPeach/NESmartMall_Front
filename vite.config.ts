@@ -13,11 +13,15 @@ export default defineConfig(({ command, mode }) => {
     plugins: [
       vue(),
       vueJsx(),
-      ...(command === 'serve' && env.VITE_CART_MOCK === 'true'
+      ...(command === 'serve' && mode !== 'production' && env.VITE_CART_MOCK === 'true'
         ? [cartMockPlugin(env.VITE_CART_MOCK_SCENARIO || 'mixed')]
         : []),
-      ...(command === 'serve' && env.VITE_ORDER_MOCK === 'true'
-        ? [orderMockPlugin(env.VITE_ORDER_MOCK_SCENARIO || 'normal')]
+      ...(command === 'serve' && mode !== 'production' && env.VITE_ORDER_MOCK === 'true'
+        ? [
+            orderMockPlugin(env.VITE_ORDER_MOCK_SCENARIO || 'normal', {
+              transactions: env.VITE_CART_MOCK === 'true',
+            }),
+          ]
         : []),
     ],
     resolve: {

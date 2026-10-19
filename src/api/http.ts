@@ -4,6 +4,17 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios'
 
+// Local request metadata only; never a header or business-body field.
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    expectedAuthorization?: string
+  }
+}
+export interface SessionRequestOptions {
+  signal?: AbortSignal
+  expectedAuthorization?: string
+}
+
 const apiBaseURL = import.meta.env.VITE_API_BASE_URL?.trim() || undefined
 
 /** Same-origin by default; Vite proxies /api to localhost:8080 in development. */
@@ -76,6 +87,11 @@ export function configureAuth(auth: AuthState) {
     const authorization = backend ? auth.getAuthorization() : null
     // This layer owns Authorization; discard stale/default/manual headers too.
     config.headers.delete('Authorization')
+    if (
+      config.expectedAuthorization !== undefined &&
+      config.expectedAuthorization !== authorization
+    )
+      throw new axios.CanceledError('账号已切换，未发送旧账号订单请求')
     if (authorization) config.headers.set('Authorization', authorization)
     requests.set(config, { authorization, isAuthEntry: backend?.isAuthEntry ?? false })
     return config

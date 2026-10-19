@@ -1,26 +1,63 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useId } from 'vue'
 import { ElAlert, ElButton, ElDialog } from 'element-plus'
 import type { CartItem } from '@/types/cart'
 import { formatPriceFen } from '@/utils/price'
 import { cartSubtotal } from '@/utils/cart'
 import { useCheckoutPayment } from '@/composables/useCheckoutPayment'
+import PaymentConfirmation from './PaymentConfirmation.vue'
 
 const visible = defineModel<boolean>({ required: true })
-const props = defineProps<{ items: CartItem[]; totalFen: number; quantity: number }>()
+const receiptFormId = useId()
+const props = defineProps<{
+  items: CartItem[]
+  totalFen: number
+  quantity: number
+  refreshCart: () => Promise<unknown>
+}>()
 const {
   confirmVisible,
   loading,
   error,
   paid,
-  quoteItems,
-  totalFen: confirmedTotalFen,
+  order,
+  stage,
+  recipient,
+  paying,
+  querying,
+  canPay,
+  uncertain,
+  paymentError,
+  paymentNotice,
   requestConfirmation,
   cancel,
   confirm,
-} = useCheckoutPayment(visible, () => props.items)
-const displayItems = computed(() => (quoteItems.value.length ? quoteItems.value : props.items))
-const displayTotalFen = computed(() => confirmedTotalFen.value ?? props.totalFen)
+  refreshOrder,
+  newPurchase,
+} = useCheckoutPayment(
+  visible,
+  () => props.items,
+  () => props.refreshCart(),
+)
+const displayItems = computed(() =>
+  order.value
+    ? order.value.items.map((item) => ({
+        ...item,
+        key: item.id,
+        priceFen: item.unitPriceFen,
+        subtotal: item.unitPriceFen * item.quantity,
+      }))
+    : props.items.map((item) => ({ ...item, key: item.cartItemId, subtotal: cartSubtotal(item) })),
+)
+const displayTotalFen = computed(() => order.value?.payableAmountFen ?? props.totalFen)
+const displayQuantity = computed(() =>
+  order.value
+    ? order.value.items.reduce((sum, item) => sum + BigInt(item.quantity), 0n).toString()
+    : props.quantity,
+)
+const blocked = computed(
+  () => loading.value || stage.value === 'unknown' || paying.value || querying.value,
+)
 </script>
 
 <template>
@@ -54,98 +91,237 @@ const displayTotalFen = computed(() => confirmedTotalFen.value ?? props.totalFen
         <h2 :id="titleId">{{ paid ? '模拟支付成功' : '结算小票' }}</h2>
       </div>
     </template>
-
-    <div class="receipt-content">
+    <form
+      :id="receiptFormId"
+      class="receipt-content"
+      @submit.prevent="paid ? (visible = false) : requestConfirmation()"
+    >
       <div class="receipt-section-label">
-        <span>商品明细</span>
+        <span>{{ order ? '订单成交明细' : '商品参考明细' }}</span>
       </div>
+      <p v-if="order" class="receipt-order-no">订单号：{{ order.orderNo }}</p>
       <ul class="receipt-items" aria-label="本次结算商品" tabindex="0">
-        <li v-for="item in displayItems" :key="item.cartItemId" class="receipt-item">
+        <li v-for="item in displayItems" :key="item.key" class="receipt-item">
           <div class="receipt-item-description">
             <span class="receipt-item-name">{{ item.name }}</span>
-            <span class="receipt-item-meta">
-              <span v-if="item.model">{{ item.model }} · </span>
-              ¥{{ formatPriceFen(item.priceFen!) }} × {{ item.quantity }}
-            </span>
+            <span class="receipt-item-meta"
+              ><span v-if="item.model">{{ item.model }} · </span>¥{{
+                formatPriceFen(item.priceFen!)
+              }}
+              × {{ item.quantity }}</span
+            >
           </div>
-          <span class="receipt-item-amount">¥{{ formatPriceFen(cartSubtotal(item)!) }}</span>
+          <span class="receipt-item-amount">¥{{ formatPriceFen(item.subtotal!) }}</span>
         </li>
       </ul>
-
       <div class="receipt-total">
         <div>
-          <span>{{ paid ? '演示支付金额' : '合计金额' }}</span
-          ><small>共 {{ displayItems.length }} 款 / {{ quantity }} 件</small>
+          <span>{{ order ? '订单应付金额' : '参考合计金额' }}</span
+          ><small>共 {{ displayItems.length }} 款 / {{ displayQuantity }} 件</small>
         </div>
         <strong><span>¥</span>{{ formatPriceFen(displayTotalFen) }}</strong>
       </div>
-
-      <div class="receipt-payment" role="status" aria-live="polite">
-        <template v-if="paid">
-          <div class="receipt-success-mark" aria-hidden="true">✓</div>
-          <p class="receipt-success-title">支付成功</p>
-          <p class="receipt-payment-note">本次为模拟支付，未产生实际扣款</p>
-        </template>
-        <template v-else>
-          <div class="receipt-payment-label">
-            <span class="receipt-payment-dot" aria-hidden="true"></span>模拟支付<span
-              class="receipt-demo-tag"
-              >体验版</span
-            >
-          </div>
-        </template>
-      </div>
-
-      <button
-        class="receipt-pay-button"
-        type="button"
-        :disabled="loading || confirmVisible"
-        @click="paid ? (visible = false) : requestConfirmation()"
-      >
-        {{ paid ? '完成，继续逛逛' : loading ? '正在查询价格…' : '模拟支付' }}
-        <span v-if="!paid">¥{{ formatPriceFen(displayTotalFen) }}</span>
-        <span aria-hidden="true">↗</span>
-      </button>
-      <p v-if="!paid" class="receipt-disclaimer">仅作支付演示，不会生成订单或实际扣款</p>
-      <div class="receipt-footer" aria-hidden="true">
-        <span></span><span>愿每一份选择，都恰到好处</span><span></span>
-      </div>
-    </div>
-  </ElDialog>
-  <ElDialog
-    :model-value="confirmVisible"
-    title="确认模拟支付"
-    width="min(420px, calc(100vw - 32px))"
-    align-center
-    append-to-body
-    destroy-on-close
-    @update:model-value="!paid && cancel()"
-  >
-    <div :aria-busy="loading" role="status" aria-live="polite">
-      <p v-if="loading">正在向服务器查询所选商品的最新价格，请稍候…</p>
-      <ElAlert v-else-if="error" :title="error" type="error" show-icon :closable="false" />
-      <p v-else-if="confirmedTotalFen !== null" class="payment-confirmation">
-        这些商品总价为 <strong>¥{{ formatPriceFen(confirmedTotalFen) }}</strong
-        >，是否支付？
+      <p v-if="order" class="receipt-payment-note">
+        商品 ¥{{ formatPriceFen(order.goodsAmountFen) }} · 运费 ¥{{
+          formatPriceFen(order.shippingFeeFen)
+        }}
       </p>
-    </div>
-    <p class="payment-demo-note">本次为模拟支付，确认后直接显示支付成功，不会实际扣款。</p>
+      <fieldset v-if="!order" class="receipt-recipient" :disabled="blocked">
+        <legend>收货信息</legend>
+        <label for="recipient-name">收货姓名</label>
+        <input
+          id="recipient-name"
+          v-model="recipient.name"
+          name="name"
+          autocomplete="shipping name"
+          maxlength="100"
+          required
+        />
+        <label for="recipient-phone">手机号</label>
+        <input
+          id="recipient-phone"
+          v-model="recipient.phone"
+          name="phone"
+          type="tel"
+          inputmode="tel"
+          autocomplete="shipping tel"
+          maxlength="32"
+          required
+        />
+        <label for="recipient-address">完整地址</label>
+        <textarea
+          id="recipient-address"
+          v-model="recipient.address"
+          name="address"
+          autocomplete="shipping street-address"
+          maxlength="500"
+          rows="2"
+          required
+        />
+      </fieldset>
+      <div v-else class="receipt-recipient-snapshot">
+        <p>{{ order.recipient.name }} · {{ order.recipient.phone }}</p>
+        <p>{{ order.recipient.address }}</p>
+      </div>
+      <div v-if="paid || order" class="receipt-payment" role="status" aria-live="polite">
+        <template v-if="paid"
+          ><div class="receipt-success-mark" aria-hidden="true">✓</div>
+          <p class="receipt-success-title">支付成功</p>
+          <p class="receipt-payment-note">本次为模拟支付，未产生实际扣款</p></template
+        >
+        <p v-else-if="order" class="receipt-payment-note">{{ paymentNotice }}</p>
+      </div>
+    </form>
     <template #footer>
-      <ElButton @click="cancel">否，暂不支付</ElButton>
-      <ElButton v-if="error" type="primary" @click="requestConfirmation">重新查询</ElButton>
-      <ElButton
-        v-else
-        type="primary"
-        :disabled="loading || confirmedTotalFen === null"
-        @click="confirm"
-      >
-        是，确认支付
-      </ElButton>
+      <div class="receipt-actions">
+        <ElAlert
+          v-if="error"
+          class="receipt-action-error"
+          :title="error"
+          type="warning"
+          :closable="false"
+          show-icon
+          role="alert"
+        />
+        <button
+          class="receipt-pay-button"
+          type="submit"
+          :form="receiptFormId"
+          :disabled="blocked || confirmVisible"
+        >
+          {{
+            paid
+              ? '完成，继续逛逛'
+              : loading
+                ? '正在创建订单…'
+                : stage === 'unknown'
+                  ? '下单结果暂未确认'
+                  : order
+                    ? '查看原单支付'
+                    : '模拟支付'
+          }}
+          <span v-if="!paid">¥{{ formatPriceFen(displayTotalFen) }}</span
+          ><span aria-hidden="true">↗</span>
+        </button>
+        <p v-if="!paid" class="receipt-disclaimer">将创建订单，模拟支付不会实际扣款</p>
+        <div v-if="stage === 'unknown' || order" class="receipt-recovery">
+          <ElButton size="small" @click="props.refreshCart">刷新购物车</ElButton>
+          <RouterLink :to="{ name: 'orders' }" @click="visible = false">我的订单</RouterLink>
+          <button
+            v-if="order && !uncertain"
+            class="receipt-new-purchase"
+            type="button"
+            :disabled="paying || querying"
+            @click="newPurchase"
+          >
+            开始新的购买
+          </button>
+          <p>购物车清理可能延迟，请以我的订单为准。</p>
+        </div>
+        <div class="receipt-footer" aria-hidden="true">
+          <span></span><span>愿每一份选择，都恰到好处</span><span></span>
+        </div>
+      </div>
     </template>
   </ElDialog>
+  <PaymentConfirmation
+    :visible="confirmVisible && visible"
+    :order="order"
+    :paying="paying"
+    :querying="querying"
+    :can-pay="canPay"
+    :uncertain="uncertain"
+    :notice="paymentNotice"
+    :error="paymentError"
+    @close="cancel"
+    @confirm="confirm"
+    @refresh="refreshOrder()"
+  />
 </template>
 
 <style scoped>
+.receipt-order-no,
+.receipt-recipient-snapshot {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.receipt-recipient {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+  padding: 0;
+  border: 0;
+}
+.receipt-recipient legend {
+  padding: 0 0 8px;
+  font-size: 12px;
+}
+.receipt-recipient label {
+  font-size: 11px;
+  color: #756a59;
+}
+.receipt-recipient input,
+.receipt-recipient input:focus-visible,
+.receipt-recipient textarea:focus-visible {
+  outline: 2px solid var(--store-focus-ring);
+  outline-offset: -2px;
+}
+.receipt-action-error {
+  margin-bottom: 12px;
+}
+.receipt-actions {
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px dashed #cfc5b2;
+  color: #443f35;
+  text-align: left;
+}
+.receipt-recipient textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid #cfc5b2;
+  border-radius: 4px;
+  background: #fffaf0;
+  color: #443f35;
+  font: inherit;
+  font-size: 13px;
+}
+.receipt-recipient textarea {
+  resize: vertical;
+}
+.receipt-recovery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  font-size: 12px;
+}
+.receipt-recovery button {
+  cursor: pointer;
+}
+.receipt-new-purchase {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #454b3d;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+:deep(.el-alert--warning) {
+  --el-color-warning: #79531b;
+  --el-color-warning-light-9: #f6eddb;
+}
+.receipt-recovery p {
+  margin: 0;
+  color: #756a59;
+  font-size: 11px;
+}
+
 .payment-confirmation {
   line-height: 1.8;
   overflow-wrap: anywhere;
@@ -296,26 +472,6 @@ const displayTotalFen = computed(() => confirmedTotalFen.value ?? props.totalFen
 .receipt-payment {
   padding: 16px 0;
   text-align: center;
-}
-.receipt-payment-label {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  font-size: 12px;
-}
-.receipt-payment-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #79816b;
-}
-.receipt-demo-tag {
-  padding: 1px 5px;
-  border: 1px solid #d8cebb;
-  border-radius: 3px;
-  color: #756a59;
-  font-size: 9px;
 }
 .receipt-payment-note {
   margin: 8px 0 0;
@@ -478,6 +634,10 @@ const displayTotalFen = computed(() => confirmedTotalFen.value ?? props.totalFen
 .checkout-receipt .el-dialog__header {
   flex-shrink: 0;
   margin: 0;
+  padding: 0;
+}
+.checkout-receipt .el-dialog__footer {
+  flex-shrink: 0;
   padding: 0;
 }
 .checkout-receipt .el-dialog__body {

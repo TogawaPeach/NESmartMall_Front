@@ -106,11 +106,12 @@ const viewAllLocation = computed(() => productListLocation(category.value, 1))
 
 <style scoped>
 .storefront {
-  --store-module-inset: 12px;
-  max-width: 1584px;
+  --store-module-inset: 6px;
+  width: 100%;
+  max-width: 1440px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 32px 64px 24px;
+  padding: 26px 80px 24px;
 }
 
 .skip-link {
@@ -128,7 +129,7 @@ const viewAllLocation = computed(() => productListLocation(category.value, 1))
 }
 
 .catalog {
-  margin-top: 41px;
+  margin-top: 34px;
   outline: none;
 }
 
@@ -267,10 +268,6 @@ const viewAllLocation = computed(() => productListLocation(category.value, 1))
     padding: 20px 40px 24px;
   }
 
-  .catalog {
-    margin-top: 30px;
-  }
-
   .catalog :deep(.product-grid) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 20px;
@@ -288,7 +285,7 @@ const viewAllLocation = computed(() => productListLocation(category.value, 1))
   }
 
   .catalog {
-    margin-top: 21px;
+    margin-top: 24px;
   }
 
   .catalog-heading {

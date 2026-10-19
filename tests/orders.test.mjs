@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { after, afterEach, before, beforeEach, test } from 'node:test'
 import { createServer } from 'vite'
 import { AxiosError } from 'axios'
-import { createRenderer, createSSRApp, h } from 'vue'
+import { createRenderer, createSSRApp, h, ref } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import vue from '@vitejs/plugin-vue'
 import { readFileSync } from 'node:fs'
@@ -120,7 +120,13 @@ function respond(data) {
 async function api() {
   return server.ssrLoadModule('/src/api/orders.ts')
 }
-async function mount({ authenticated = true, path = '/orders', adapter, entry = false } = {}) {
+async function mount({
+  authenticated = true,
+  path = '/orders',
+  adapter,
+  entry = false,
+  receipt = false,
+} = {}) {
   if (authenticated) saveSession()
   const pinia = createPinia(),
     auth = useAuthStore(pinia)
@@ -146,10 +152,15 @@ async function mount({ authenticated = true, path = '/orders', adapter, entry = 
   })
   await router.push(path)
   const module = await server.ssrLoadModule(
-    entry ? '/src/composables/useOrderEntry.ts' : '/src/composables/useOrders.ts',
+    receipt
+      ? '/src/composables/useConfirmReceipt.ts'
+      : entry
+        ? '/src/composables/useOrderEntry.ts'
+        : '/src/composables/useOrders.ts',
   )
   const { useLoginPromptStore } = await server.ssrLoadModule('/src/stores/loginPrompt.ts')
   let resource
+  const selectedOrder = ref(summary(order({ status: 'PENDING_RECEIPT' })))
   const renderer = createRenderer({
     createComment: () => ({}),
     insert: () => {},
@@ -159,11 +170,14 @@ async function mount({ authenticated = true, path = '/orders', adapter, entry = 
   })
   const app = renderer.createApp({
     setup() {
-      resource = entry
-        ? module.useOrderEntry()
-        : path.startsWith('/orders/')
-          ? module.useOrderDetail()
-          : module.useOrders()
+      if (receipt) assert.equal(typeof module.useConfirmReceipt, 'function')
+      resource = receipt
+        ? module.useConfirmReceipt(() => selectedOrder.value)
+        : entry
+          ? module.useOrderEntry()
+          : path.startsWith('/orders/')
+            ? module.useOrderDetail()
+            : module.useOrders()
       return () => null
     },
   })
@@ -172,7 +186,7 @@ async function mount({ authenticated = true, path = '/orders', adapter, entry = 
   fixture = { app, auth, router, prompt: useLoginPromptStore(pinia) }
   app.mount({})
   await flush()
-  return { ...fixture, resource }
+  return { ...fixture, resource, selectedOrder }
 }
 
 test('order queries use Bearer, full lists and order numbers without client identity', async () => {
@@ -243,6 +257,7 @@ test('summary card labels payable amount as order amount without inventing payme
       h(OrderCard, { order: backendResponse.data[1], listQuery: { status: 'PENDING_SHIPMENT' } }),
   })
   app.use(router)
+  app.use(createPinia())
   const html = await renderToString(app)
   assert.match(html, /订单金额/)
   assert.match(html, /19\.80/)
@@ -639,3 +654,147 @@ test('status validates allowed progress events and chronological order', async (
     await assert.rejects(queryOrder(order().orderNo), { name: 'OrderResponseError' })
   }
 })
+
+test('receipt confirmation posts only the order number with Bearer authentication', async () => {
+  const { confirmReceipt } = await api()
+  assert.equal(typeof confirmReceipt, 'function')
+  respond(null)
+  await confirmReceipt('JW202610160001')
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].method, 'post')
+  assert.equal(requests[0].url, '/api/orders/JW202610160001')
+  assert.equal(requests[0].data, undefined)
+  assert.equal(requests[0].headers.get('Authorization'), 'Bearer order-token')
+  await assert.rejects(confirmReceipt('../orders'), { name: 'OrderResponseError' })
+  assert.equal(requests.length, 1)
+})
+
+test('receipt confirmation rejects business failures, HTTP failures, malformed and unknown results', async () => {
+  const { confirmReceipt } = await api()
+  assert.equal(typeof confirmReceipt, 'function')
+  for (const status of [401, 403, 404, 409, 503]) {
+    for (const transport of ['business', 'http']) {
+      http.defaults.adapter = async (config) => {
+        const body = { code: status, message: '当前订单无法确认收货' }
+        if (transport === 'business') return reply(config, body)
+        throw new AxiosError('failure', undefined, config, {}, reply(config, body, status))
+      }
+      await assert.rejects(confirmReceipt('JW202610160001'), { name: 'OrderReceiptError' })
+    }
+  }
+  http.defaults.adapter = async (config) => reply(config, { data: null })
+  await assert.rejects(confirmReceipt('JW202610160001'), { name: 'OrderReceiptError' })
+  http.defaults.adapter = async (config) => {
+    throw new AxiosError('offline', 'ERR_NETWORK', config)
+  }
+  await assert.rejects(confirmReceipt('JW202610160001'), /刷新订单确认/)
+})
+
+test('opening and cancelling receipt dialog sends nothing; only explicit agreement submits', async () => {
+  const { resource } = await mount({ receipt: true })
+  assert.equal(await resource.confirm(), false)
+  resource.open()
+  assert.equal(resource.visible.value, true)
+  assert.equal(requests.length, 0)
+  resource.close()
+  assert.equal(resource.visible.value, false)
+  assert.equal(await resource.confirm(), false)
+  assert.equal(requests.length, 0)
+  resource.open()
+  assert.equal(await resource.confirm(), true)
+  assert.equal(resource.visible.value, false)
+  assert.equal(requests.length, 1)
+  assert.equal(await resource.confirm(), false)
+  resource.open()
+  assert.equal(resource.visible.value, false)
+})
+
+test('receipt submission blocks duplicate requests and dismissal while pending', async () => {
+  let finish
+  const { resource } = await mount({
+    receipt: true,
+    adapter: (config) =>
+      new Promise((resolve) => {
+        finish = () => resolve(reply(config, ok(null)))
+      }),
+  })
+  resource.open()
+  const pending = resource.confirm()
+  await flush()
+  assert.equal(resource.submitting.value, true)
+  resource.close()
+  assert.equal(resource.visible.value, true)
+  assert.equal(await resource.confirm(), false)
+  assert.equal(requests.length, 1)
+  finish()
+  assert.equal(await pending, true)
+  assert.equal(resource.submitting.value, false)
+})
+
+test('failed receipt stays open for recovery without changing order status', async () => {
+  const { resource, selectedOrder } = await mount({
+    receipt: true,
+    adapter: (config) => reply(config, { code: 409, message: '订单状态已变化，请刷新订单' }),
+  })
+  resource.open()
+  assert.equal(await resource.confirm(), false)
+  assert.equal(resource.visible.value, true)
+  assert.equal(resource.submitting.value, false)
+  assert.match(resource.error.value, /订单状态已变化/)
+  assert.equal(selectedOrder.value.status, 'PENDING_RECEIPT')
+  resource.close()
+  resource.open()
+  assert.equal(resource.error.value, '')
+  respond(null)
+  assert.equal(await resource.confirm(), true)
+})
+
+test('receipt cannot open or submit anonymously or for other order statuses', async () => {
+  const { resource, auth, selectedOrder } = await mount({ receipt: true })
+  for (const status of ['PENDING_PAYMENT', 'PENDING_SHIPMENT', 'COMPLETED', 'CANCELLED']) {
+    selectedOrder.value = summary(order({ status }))
+    resource.open()
+    assert.equal(resource.visible.value, false)
+    assert.equal(await resource.confirm(), false)
+  }
+  selectedOrder.value = summary(order({ status: 'PENDING_RECEIPT' }))
+  auth.logout()
+  resource.open()
+  assert.equal(resource.visible.value, false)
+  assert.equal(await resource.confirm(), false)
+  assert.equal(requests.length, 0)
+})
+
+for (const change of ['account', 'order', 'unmount']) {
+  test(`receipt ignores stale success after ${change} changes`, async () => {
+    let finish
+    const { resource, auth, selectedOrder, app } = await mount({
+      receipt: true,
+      adapter: (config) =>
+        new Promise((resolve) => {
+          finish = () => resolve(reply(config, ok(null)))
+        }),
+    })
+    resource.open()
+    const pending = resource.confirm()
+    await flush()
+    const signal = requests[0].signal
+    if (change === 'account') {
+      saveSession('other-token')
+      auth.getAuthorization()
+    }
+    if (change === 'order')
+      selectedOrder.value = summary(order({ orderNo: 'JW2', status: 'PENDING_RECEIPT' }))
+    if (change === 'unmount') {
+      app.unmount()
+      fixture = undefined
+      auth.logout()
+      auth.$dispose()
+    }
+    assert.equal(signal.aborted, true)
+    assert.equal(resource.visible.value, false)
+    finish()
+    assert.equal(await pending, false)
+    assert.equal(resource.error.value, '')
+  })
+}

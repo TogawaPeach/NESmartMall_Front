@@ -1,7 +1,14 @@
 import axios from 'axios'
-import { http } from './http'
+import { http, type SessionRequestOptions } from './http'
 import { isOrderStatus } from '@/constants/orderStatus'
-import type { Order, OrderItem, OrderLoadState, OrderStatus, OrderSummary } from '@/types/order'
+import type {
+  CreateOrderInput,
+  Order,
+  OrderItem,
+  OrderLoadState,
+  OrderStatus,
+  OrderSummary,
+} from '@/types/order'
 
 export class OrderResponseError extends Error {
   constructor(message = '订单响应格式异常') {
@@ -13,6 +20,59 @@ export class OrderQueryError extends Error {
   constructor(public readonly kind: OrderLoadState) {
     super(kind)
     this.name = 'OrderQueryError'
+  }
+}
+export class OrderReceiptError extends Error {
+  constructor(message = '确认收货失败，请稍后重试') {
+    super(message)
+    this.name = 'OrderReceiptError'
+  }
+}
+
+function receiptError(body: unknown, status?: number): OrderReceiptError {
+  const value =
+    body && typeof body === 'object' && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : undefined
+  const code = status ?? value?.code
+  const fallback =
+    code === 401
+      ? '登录已过期，请重新登录后确认收货'
+      : code === 403
+        ? '无权确认此订单收货'
+        : code === 404
+          ? '订单不存在或确认收货服务暂未开放'
+          : code === 409
+            ? '订单状态已变化，请刷新订单后重试'
+            : '确认收货失败，请稍后重试'
+  return new OrderReceiptError(
+    typeof value?.message === 'string' && value.message.trim() ? value.message.trim() : fallback,
+  )
+}
+
+/** Proposed contract: POST confirms receipt; GET at the same path queries the order. */
+export async function confirmReceipt(
+  orderNo: string,
+  options: SessionRequestOptions = {},
+): Promise<void> {
+  const path = `/api/orders/${orderNumber(orderNo)}`
+  try {
+    const { data: body } = await http.post<unknown>(path, undefined, options)
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      Array.isArray(body) ||
+      !('code' in body) ||
+      body.code !== 200
+    )
+      throw receiptError(body)
+  } catch (error) {
+    if (axios.isCancel(error)) throw error
+    if (axios.isAxiosError(error)) {
+      if (error.response) throw receiptError(error.response.data, error.response.status)
+      throw new OrderReceiptError('无法确认收货结果，请检查网络并刷新订单确认')
+    }
+    throw error
   }
 }
 function record(value: unknown): Record<string, unknown> {
@@ -97,6 +157,35 @@ function readItem(value: unknown): OrderItem {
     quantity: count(v.quantity, 1),
   }
 }
+function readPaymentFields(v: Record<string, unknown>, required = false): Partial<OrderSummary> {
+  const fields = ['payExpireAt', 'serverTime', 'canPay', 'displayStatus', 'cancelReason']
+  if (!required && fields.every((key) => v[key] === undefined)) return {}
+  const payExpireAt = time(v.payExpireAt)
+  const serverTime = time(v.serverTime)
+  if (
+    typeof v.canPay !== 'boolean' ||
+    (!isOrderStatus(v.displayStatus) && v.displayStatus !== 'PAYMENT_EXPIRED') ||
+    (v.cancelReason !== null && typeof v.cancelReason !== 'string')
+  )
+    throw new OrderResponseError()
+  const expired = Date.parse(serverTime) >= Date.parse(payExpireAt)
+  if (
+    v.canPay !== (v.status === 'PENDING_PAYMENT' && !expired) ||
+    v.displayStatus !==
+      (v.status === 'PENDING_PAYMENT' && expired ? 'PAYMENT_EXPIRED' : v.status) ||
+    (v.status !== 'CANCELLED' && v.cancelReason !== null) ||
+    Date.parse(payExpireAt) !== Date.parse(time(v.createdAt)) + 15 * 60_000
+  )
+    throw new OrderResponseError()
+  return {
+    payExpireAt,
+    serverTime,
+    canPay: v.canPay,
+    displayStatus: v.displayStatus,
+    cancelReason: v.cancelReason,
+  }
+}
+
 function readOrderSummary(value: unknown): OrderSummary {
   const v = record(value)
   if (!isOrderStatus(v.status) || !Array.isArray(v.items) || !v.items.length)
@@ -114,6 +203,7 @@ function readOrderSummary(value: unknown): OrderSummary {
     createdAt: time(v.createdAt),
     items,
     payableAmountFen: count(v.payableAmountFen),
+    ...readPaymentFields(v),
   }
 }
 function readOrder(value: unknown): Order {
@@ -196,7 +286,7 @@ function rejectStatus(status: unknown, detail: boolean): never {
 async function request(
   path: string,
   detail: boolean,
-  options: { params?: Record<string, unknown>; signal?: AbortSignal },
+  options: SessionRequestOptions & { params?: Record<string, unknown> },
 ): Promise<unknown> {
   try {
     const { data } = await http.get<unknown>(path, options)
@@ -210,7 +300,7 @@ async function request(
 }
 export async function queryOrders(
   query: { status?: OrderStatus } = {},
-  options: { signal?: AbortSignal } = {},
+  options: SessionRequestOptions = {},
 ): Promise<OrderSummary[]> {
   if (query.status !== undefined && !isOrderStatus(query.status)) throw new OrderResponseError()
   const params = query.status ? { status: query.status } : {}
@@ -223,9 +313,117 @@ export async function queryOrders(
 }
 export async function queryOrder(
   orderNo: string,
-  options: { signal?: AbortSignal } = {},
+  options: SessionRequestOptions = {},
 ): Promise<Order> {
   const result = readOrder(await request(`/api/orders/${orderNumber(orderNo)}`, true, options))
   if (result.orderNo !== orderNo) throw new OrderResponseError()
+  return result
+}
+
+export const CREATE_UNKNOWN_MESSAGE = '下单结果暂未确认，请刷新购物车并查看‘我的订单’。'
+
+export class OrderWriteError extends Error {
+  constructor(
+    public readonly kind: 'rejected' | 'unavailable' | 'login-required' | 'forbidden' | 'unknown',
+    message: string,
+  ) {
+    super(message)
+    this.name = 'OrderWriteError'
+  }
+}
+
+/** Whitelist only purchase intent. Never copy client pricing or identity into the body. */
+export function prepareCreateOrder(input: CreateOrderInput): CreateOrderInput {
+  if (!Array.isArray(input.items) || !input.items.length) throw new Error('请选择购买商品')
+  const items = input.items.map((item) => ({
+    productId: id(item.productId),
+    quantity: count(item.quantity, 1),
+  }))
+  if (new Set(items.map((item) => item.productId)).size !== items.length)
+    throw new Error('商品重复，请刷新购物车')
+  const { name, phone, address } = input.recipient
+  const recipient = { name: name.trim(), phone: phone.trim(), address: address.trim() }
+  if (!recipient.name || recipient.name.length > 100)
+    throw new Error('请填写收货姓名（最多 100 字）')
+  if (
+    recipient.phone.length > 32 ||
+    !/^\+?[0-9][0-9 ()-]{5,30}[0-9]$/.test(recipient.phone) ||
+    recipient.phone.replace(/\D/g, '').length < 7
+  )
+    throw new Error('请填写有效手机号（7–32 位，可含国际区号）')
+  if (!recipient.address || recipient.address.length > 500)
+    throw new Error('请填写完整收货地址（最多 500 字）')
+  return { items, recipient }
+}
+
+function writeRejection(status: unknown): OrderWriteError {
+  if (status === 400 || status === 409)
+    return new OrderWriteError(
+      'rejected',
+      status === 409
+        ? '商品或库存已变化，请刷新购物车并修改后下单'
+        : '下单信息未通过校验，请检查商品及收货信息',
+    )
+  if (status === 404 || status === 405)
+    return new OrderWriteError('unavailable', '订单交易服务暂未开放')
+  if (status === 401) return new OrderWriteError('login-required', '请重新登录后操作订单')
+  if (status === 403) return new OrderWriteError('forbidden', '暂无权限操作此订单')
+  return new OrderWriteError('unknown', CREATE_UNKNOWN_MESSAGE)
+}
+
+async function writeOrder(
+  path: string,
+  input?: CreateOrderInput,
+  options: SessionRequestOptions = {},
+): Promise<Order> {
+  let response
+  try {
+    response = await http.post<unknown>(path, input, options)
+  } catch (cause) {
+    if (axios.isAxiosError(cause) && cause.response) throw writeRejection(cause.response.status)
+    throw new OrderWriteError('unknown', CREATE_UNKNOWN_MESSAGE)
+  }
+  if (response.status !== 200) throw writeRejection(response.status)
+  const body = record(response.data)
+  if (body.code !== 200) throw writeRejection(body.code)
+  if (body.message !== 'OK') throw new OrderResponseError()
+  const value = record(body.data)
+  readPaymentFields(value, true)
+  const order = readOrder(value)
+  if (
+    order.recipient.name.length > 100 ||
+    order.recipient.phone.length > 32 ||
+    order.recipient.address.length > 500 ||
+    order.discountAmountFen !== 0 ||
+    (order.paidAmountFen !== null && order.paidAmountFen !== order.payableAmountFen)
+  )
+    throw new OrderResponseError()
+  return order
+}
+
+export async function createOrder(
+  input: CreateOrderInput,
+  options: SessionRequestOptions = {},
+): Promise<Order> {
+  const intent = prepareCreateOrder(input)
+  const result = await writeOrder('/api/orders', intent, options)
+  if (result.status !== 'PENDING_PAYMENT') throw new OrderResponseError()
+  return result
+}
+
+export function isPaidOrder(order: Order): boolean {
+  return (
+    ['PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED'].includes(order.status) &&
+    order.paidAt !== null &&
+    order.paidAmountFen === order.payableAmountFen
+  )
+}
+
+export async function payOrder(
+  orderNo: string,
+  options: SessionRequestOptions = {},
+): Promise<Order> {
+  const result = await writeOrder(`/api/orders/${orderNumber(orderNo)}/pay`, undefined, options)
+  if (result.orderNo !== orderNo || !isPaidOrder(result)) throw new OrderResponseError()
   return result
 }

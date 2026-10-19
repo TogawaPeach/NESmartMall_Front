@@ -7,11 +7,17 @@ import CartItemRow from '@/components/storefront/CartItemRow.vue'
 import CheckoutReceipt from '@/components/storefront/CheckoutReceipt.vue'
 import { useCart } from '@/composables/useCart'
 import { useLoginPromptStore } from '@/stores/loginPrompt'
+import { storeToRefs } from 'pinia'
+import { useAuthStore } from '@/stores/auth'
+import { useCheckoutStore } from '@/stores/checkout'
 import { formatPriceFen } from '@/utils/price'
 
 const keyword = ref('')
 const checkoutOpen = ref(false)
 const loginPrompt = useLoginPromptStore()
+const auth = useAuthStore()
+const { hasAttempt } = storeToRefs(useCheckoutStore())
+const isMock = import.meta.env.DEV && import.meta.env.VITE_ORDER_MOCK === 'true'
 const {
   items,
   state,
@@ -44,13 +50,16 @@ const canCheckout = computed(
     !deletingIds.value.size,
 )
 
-// Dismiss a receipt if an account change or refresh replaces its contents.
-watch([state, selectedItems, totalFen], () => {
-  checkoutOpen.value = false
-})
+watch(
+  () => auth.accessToken,
+  () => {
+    checkoutOpen.value = false
+  },
+  { flush: 'sync' },
+)
 
 function openCheckout() {
-  if (canCheckout.value) checkoutOpen.value = true
+  if (canCheckout.value || hasAttempt.value) checkoutOpen.value = true
 }
 const stateCopy = computed(() => {
   switch (state.value) {
@@ -110,6 +119,8 @@ const stateCopy = computed(() => {
         }}
       </div>
 
+      <p v-if="isMock" role="note">开发模拟交易 · 仅使用隔离的虚构数据</p>
+      <ElButton v-if="hasAttempt" @click="openCheckout">查看本次下单状态</ElButton>
       <section class="cart-content" aria-label="购物车商品">
         <div v-if="state === 'loading'" class="cart-loading"><ElSkeleton :rows="8" animated /></div>
         <template v-else-if="state === 'success'">
@@ -204,6 +215,7 @@ const stateCopy = computed(() => {
       :items="selectedItems"
       :total-fen="totalFen ?? 0"
       :quantity="selectedQuantity ?? 0"
+      :refresh-cart="retry"
     />
   </div>
 </template>

@@ -49,7 +49,13 @@ const steps = computed(() =>
             </div>
             <div class="order-consult-actions">
               <ElButton :icon="Service" @click="consultOrder(order)">联系商家客服</ElButton>
-              <OrderActions :status="order.status" />
+              <OrderActions
+                :key="order.orderNo"
+                :order="order"
+                :status="order.status"
+                :order-no="order.orderNo"
+                @confirmed="retry"
+              />
             </div>
           </div>
           <p class="order-number">
@@ -140,7 +146,7 @@ const steps = computed(() =>
             </dl>
           </div>
         </section>
-        <p class="order-service-note">支付、取消订单和确认收货暂未开放。</p>
+        <p class="order-service-note">模拟支付不会实际扣款；取消订单暂未开放。</p>
       </template>
       <OrderPageState v-else :state="state" @retry="retry" />
     </div>

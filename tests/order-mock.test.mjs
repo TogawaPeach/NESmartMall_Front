@@ -20,15 +20,16 @@ async function start(scenario) {
   const server = await createServer({
     configFile: false,
     optimizeDeps: { noDiscovery: true, include: [] },
-    plugins: [plugin(scenario)],
+    plugins: [plugin(scenario, { transactions: true })],
     server: { host: '127.0.0.1', port: 0, hmr: false, ws: false },
     appType: 'custom',
   })
   servers.push(server)
   await server.listen()
   const base = server.resolvedUrls.local[0]
-  return (path, authenticated = true) =>
+  return (path, authenticated = true, options = {}) =>
     fetch(new URL(path, base), {
+      ...options,
       headers: authenticated ? { Authorization: 'Bearer local-fixture' } : {},
     })
 }
@@ -87,4 +88,99 @@ test('mock failure modes preserve empty, permission, unavailable, error and malf
     if (scenario === 'empty') assert.deepEqual(body.data, [])
     if (scenario === 'malformed') assert.ok(!Array.isArray(body.data))
   }
+})
+
+const intent = {
+  items: [
+    { productId: '9007199254740993123', quantity: 2 },
+    { productId: '44', quantity: 1 },
+  ],
+  recipient: { name: '模拟验收', phone: '13800138000', address: '虚构验收地址' },
+}
+const post = (data) => ({ method: 'POST', body: JSON.stringify(data) })
+test('explicit mock creates authoritative snapshots, preserves carts, pays idempotently and isolates accounts', async () => {
+  const request = await start('normal')
+  const created = await (await request('/api/orders', true, post(intent))).json()
+  assert.equal(created.message, 'OK')
+  assert.equal(created.data.status, 'PENDING_PAYMENT')
+  assert.equal(created.data.items[0].unitPriceFen, 134400)
+  assert.equal(created.data.payableAmountFen, 270000)
+  assert.equal(Date.parse(created.data.payExpireAt) - Date.parse(created.data.createdAt), 900000)
+  const orderNo = created.data.orderNo
+  const path = `/api/orders/${orderNo}`
+  assert.equal((await (await request(path)).json()).data.orderNo, orderNo)
+  const paid = await (await request(`${path}/pay`, true, { method: 'POST' })).json()
+  assert.equal(paid.data.status, 'PENDING_SHIPMENT')
+  assert.equal(paid.data.paidAmountFen, 270000)
+  assert.equal(paid.data.canPay, false)
+  const again = await (await request(`${path}/pay`, true, { method: 'POST' })).json()
+  assert.equal(again.data.paidAt, paid.data.paidAt)
+  assert.equal((await request(`${path}/pay`, false, { method: 'POST' })).status, 401)
+  const zero = await (
+    await request(
+      '/api/orders',
+      true,
+      post({ ...intent, items: [{ productId: '44', quantity: 1 }] }),
+    )
+  ).json()
+  assert.equal(zero.data.payableAmountFen, 0)
+  assert.equal((await request('/api/orders', true, post({ ...intent, userId: '1' }))).status, 400)
+  assert.equal(
+    (
+      await request(
+        '/api/orders',
+        true,
+        post({ ...intent, items: [{ productId: '43', quantity: 99 }] }),
+      )
+    ).status,
+    400,
+  )
+})
+test('mock unknown results persist committed orders and expiry never hides unpaid orders', async () => {
+  for (const scenario of ['create-unknown', 'create-malformed', 'pay-unknown', 'expired']) {
+    const request = await start(scenario)
+    const response = await request('/api/orders', true, post(intent))
+    assert.equal(response.status, scenario === 'create-unknown' ? 500 : 200)
+    const all = await (await request('/api/orders')).json()
+    const latest = all.data[0]
+    const detail = await (await request(`/api/orders/${latest.orderNo}`)).json()
+    assert.equal(detail.data.recipient.name, '模拟验收')
+    if (scenario === 'expired') {
+      assert.equal(detail.data.status, 'PENDING_PAYMENT')
+      assert.equal(detail.data.displayStatus, 'PAYMENT_EXPIRED')
+      assert.equal(detail.data.cancelledAt, null)
+      assert.equal(detail.data.canPay, false)
+      assert.equal(
+        (await request(`/api/orders/${latest.orderNo}/pay`, true, { method: 'POST' })).status,
+        409,
+      )
+    }
+    if (scenario === 'pay-unknown') {
+      assert.equal(
+        (await request(`/api/orders/${latest.orderNo}/pay`, true, { method: 'POST' })).status,
+        500,
+      )
+      assert.equal(
+        (await (await request(`/api/orders/${latest.orderNo}`)).json()).data.status,
+        'PENDING_SHIPMENT',
+      )
+    }
+  }
+})
+
+test('order-only mock cannot create transactions from a real cart', async () => {
+  const server = await createServer({
+    configFile: false,
+    optimizeDeps: { noDiscovery: true, include: [] },
+    plugins: [plugin('normal')],
+    server: { host: '127.0.0.1', port: 0, hmr: false, ws: false },
+    appType: 'custom',
+  })
+  servers.push(server)
+  await server.listen()
+  const response = await fetch(new URL('/api/orders', server.resolvedUrls.local[0]), {
+    ...post(intent),
+    headers: { Authorization: 'Bearer local-fixture' },
+  })
+  assert.equal(response.status, 404)
 })

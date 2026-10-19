@@ -17,6 +17,22 @@ export interface OrderSummary {
   createdAt: string
   items: OrderItem[]
   payableAmountFen: number
+  payExpireAt?: string
+  serverTime?: string
+  canPay?: boolean
+  displayStatus?: OrderStatus | 'PAYMENT_EXPIRED'
+  cancelReason?: string | null
+}
+
+export interface OrderRecipient {
+  name: string
+  phone: string
+  address: string
+}
+
+export interface CreateOrderInput {
+  items: { productId: string; quantity: number }[]
+  recipient: OrderRecipient
 }
 
 export interface Order extends OrderSummary {

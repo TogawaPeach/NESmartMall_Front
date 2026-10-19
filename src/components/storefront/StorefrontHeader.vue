@@ -168,9 +168,7 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
             v-if="item.route === 'cart'"
             class="utility-button cart-link"
             :to="{ name: 'cart' }"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="购物车（在新标签页中打开）"
+            aria-label="购物车"
           >
             <ElIcon aria-hidden="true"><ShoppingCart /></ElIcon>
           </RouterLink>

@@ -8,7 +8,7 @@ import type { OrderLoadState, OrderStatus } from '@/types/order'
 
 function useOrderQuery<T>(
   key: () => string,
-  query: (signal: AbortSignal) => Promise<T>,
+  query: (signal: AbortSignal, authorization: string) => Promise<T>,
   empty: (data: T) => boolean,
 ) {
   const auth = useAuthStore()
@@ -38,7 +38,7 @@ function useOrderQuery<T>(
       return sequence === currentSequence && !current.signal.aborted && latest === authorization
     }
     try {
-      const result = await query(current.signal)
+      const result = await query(current.signal, authorization)
       if (!isCurrent()) return
       data.value = result
       state.value = empty(result) ? 'empty' : 'success'
@@ -60,7 +60,8 @@ export function useOrders() {
   )
   const resource = useOrderQuery(
     () => status.value ?? '',
-    (signal) => queryOrders({ status: status.value }, { signal }),
+    (signal, authorization) =>
+      queryOrders({ status: status.value }, { signal, expectedAuthorization: authorization }),
     (orders) => orders.length === 0,
   )
   function changeStatus(value: OrderStatus | undefined) {
@@ -77,7 +78,8 @@ export function useOrderDetail() {
   const route = useRoute()
   const resource = useOrderQuery(
     () => String(route.params.orderNo),
-    (signal) => queryOrder(String(route.params.orderNo), { signal }),
+    (signal, authorization) =>
+      queryOrder(String(route.params.orderNo), { signal, expectedAuthorization: authorization }),
     () => false,
   )
   const listLocation = computed(() => ({
