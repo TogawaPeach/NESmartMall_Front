@@ -74,7 +74,7 @@ const steps = computed(() =>
           </p>
           <div v-if="order.status === 'CANCELLED'" class="order-cancelled-note">
             提交于 {{ formatOrderTime(order.createdAt)
-            }}<span>取消于 {{ formatOrderTime(order.cancelledAt) }}</span>
+            }}<span v-if="order.cancelledAt">取消于 {{ formatOrderTime(order.cancelledAt) }}</span>
           </div>
           <ol v-else class="order-progress" aria-label="订单进度">
             <li

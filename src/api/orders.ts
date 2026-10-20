@@ -368,7 +368,7 @@ export async function cancelOrder(
     if (body.code !== 200 || body.message !== 'OK') throw new OrderResponseError()
     const data = record(body.data)
     if (data.orderNo !== orderNo || data.status !== 'CANCELLED') throw new OrderResponseError()
-    return { orderNo, status: 'CANCELLED', cancelledAt: time(data.cancelledAt) }
+    return { orderNo, status: 'CANCELLED' }
   } catch (cause) {
     if (axios.isCancel(cause) || cause instanceof OrderCancelError) throw cause
     if (axios.isAxiosError(cause) && cause.response)

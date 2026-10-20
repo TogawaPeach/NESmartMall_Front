@@ -813,7 +813,6 @@ for (const change of ['account', 'order', 'unmount']) {
 const cancelledResult = {
   orderNo: 'JW202610160001',
   status: 'CANCELLED',
-  cancelledAt: '2026-10-20T02:40:00.000Z',
 }
 const cancelReply = (config, data = cancelledResult) =>
   reply(config, { code: 200, message: 'OK', data })
@@ -860,8 +859,6 @@ test('cancel distinguishes explicit rejection from malformed or unknown results 
     {},
     { ...cancelledResult, orderNo: 'JW2' },
     { ...cancelledResult, status: 'PENDING_PAYMENT' },
-    { ...cancelledResult, cancelledAt: null },
-    { ...cancelledResult, cancelledAt: '2026-02-30T00:00:00Z' },
   ]) {
     http.defaults.adapter = async (config) => cancelReply(config, data)
     await assert.rejects(cancelOrder('JW202610160001'), (error) => error.status === undefined)
@@ -906,7 +903,15 @@ test('cancel unknown result queries once and reconciles committed cancellation w
     cancellation: true,
     adapter: (config) => {
       if (config.method === 'post') throw new AxiosError('timeout', 'ECONNABORTED', config)
-      return reply(config, ok(order(cancelledResult)))
+      return reply(
+        config,
+        ok(
+          order({
+            ...cancelledResult,
+            cancelledAt: '2026-10-20T02:40:00.000Z',
+          }),
+        ),
+      )
     },
   })
   resource.open()
@@ -1062,7 +1067,7 @@ for (const path of ['/orders', '/orders?status=PENDING_PAYMENT', '/orders/JW2026
         : resource.data.value
       assert.equal(value.status, 'CANCELLED')
       assert.equal(value.canPay, false)
-      if (path.includes('/JW')) assert.equal(value.cancelledAt, cancelledResult.cancelledAt)
+      if (path.includes('/JW')) assert.equal(value.cancelledAt, null)
     }
   })
 }

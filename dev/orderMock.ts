@@ -243,7 +243,6 @@ export function orderMockPlugin(
           return send(200, {
             orderNo: order.orderNo,
             status: order.status,
-            cancelledAt: order.cancelledAt,
           })
         }
         if (paying) {

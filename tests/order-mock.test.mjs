@@ -196,16 +196,17 @@ test('mock cancellation returns minimal facts, is idempotent and removes unpaid 
   assert.equal(response.status, 200)
   const result = await response.json()
   assert.equal(result.message, 'OK')
-  assert.deepEqual(Object.keys(result.data).sort(), ['cancelledAt', 'orderNo', 'status'])
+  assert.deepEqual(Object.keys(result.data).sort(), ['orderNo', 'status'])
   assert.equal(result.data.orderNo, created.orderNo)
   assert.equal(result.data.status, 'CANCELLED')
-  assert.ok(Number.isFinite(Date.parse(result.data.cancelledAt)))
+  const cancelledDetail = (await (await request(path)).json()).data
+  assert.ok(Number.isFinite(Date.parse(cancelledDetail.cancelledAt)))
   const again = await (await request(`${path}/cancel`, true, { method: 'POST' })).json()
   assert.deepEqual(again.data, result.data)
   const detail = (await (await request(path)).json()).data
   assert.equal(detail.status, 'CANCELLED')
   assert.equal(detail.canPay, false)
-  assert.equal(detail.cancelledAt, result.data.cancelledAt)
+  assert.equal(detail.cancelledAt, cancelledDetail.cancelledAt)
   const unpaid = (await (await request('/api/orders?status=PENDING_PAYMENT')).json()).data
   assert.ok(unpaid.every((item) => item.orderNo !== created.orderNo))
   assert.equal((await request(`${path}/pay`, true, { method: 'POST' })).status, 409)

@@ -43,7 +43,6 @@ export interface CreateOrderResult {
 export interface CancelOrderResult {
   orderNo: string
   status: 'CANCELLED'
-  cancelledAt: string
 }
 
 export interface Order extends OrderSummary {
