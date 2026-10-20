@@ -341,8 +341,8 @@ test('zero-yuan payment uses /pay without body and only explicit paid response s
   )
   await payment.confirm()
   assert.equal(payment.paid.value, true)
-  assert.equal(requests.at(-1).url, '/api/orders/JW202610190001/pay')
-  assert.equal(requests.at(-1).data, undefined)
+  assert.equal(requests.find((r) => r.method === 'post').url, '/api/orders/JW202610190001/pay')
+  assert.equal(requests.find((r) => r.method === 'post').data, undefined)
   visible.value = false
   visible.value = true
   assert.equal(payment.paid.value, true)
@@ -463,7 +463,7 @@ test('cart refresh failure never undoes creation or permits a second create', as
   assert.equal(requests.length, 1)
 })
 
-test('malformed or wrong-number pay response can only recover through matching GET', async () => {
+test('malformed payment result can only recover through matching GET', async () => {
   const { payment } = await readyPayment()
   await payment.requestConfirmation()
   const paid = snapshot({
@@ -478,9 +478,9 @@ test('malformed or wrong-number pay response can only recover through matching G
     return {
       ...reply(config, []),
       data: {
-        code: 200,
+        code: config.method === 'post' ? undefined : 200,
         message: 'OK',
-        data: config.method === 'post' ? { ...paid, orderNo: 'JW999' } : paid,
+        data: paid,
       },
     }
   }
@@ -659,3 +659,173 @@ for (const payableAmountFen of [0, 13440]) {
     assert.equal(requests[0].url, '/api/orders')
   })
 }
+
+test('payment API accepts empty success data and ignores legacy detail without requiring an order snapshot', async () => {
+  const { payOrder } = await server.ssrLoadModule('/src/api/orders.ts')
+  await readyPayment()
+  for (const data of [null, undefined, snapshot()]) {
+    respondOrder(data)
+    await assert.doesNotReject(payOrder('JW202610190001'))
+    assert.equal(requests.at(-1).url, '/api/orders/JW202610190001/pay')
+    assert.equal(requests.at(-1).method, 'post')
+    assert.equal(requests.at(-1).data, undefined)
+    assert.equal(requests.at(-1).headers.get('Authorization'), 'Bearer checkout-token')
+  }
+})
+
+test('order payment without legacy eligibility fields accepts success then refreshes matching order', async () => {
+  const { payment } = await readyPayment()
+  const legacy = snapshot()
+  for (const key of ['serverTime', 'canPay', 'displayStatus', 'cancelReason']) delete legacy[key]
+  respondOrder(legacy)
+  await payment.requestConfirmation()
+  assert.equal(payment.canPay.value, true)
+  http.defaults.adapter = async (config) => {
+    requests.push(config)
+    return {
+      ...reply(config, []),
+      data: {
+        code: 200,
+        message: 'OK',
+        data:
+          config.method === 'post'
+            ? null
+            : snapshot({
+                status: 'PENDING_SHIPMENT',
+                paidAt: new Date().toISOString(),
+                paidAmountFen: 100,
+                canPay: false,
+                displayStatus: 'PENDING_SHIPMENT',
+              }),
+      },
+    }
+  }
+  await payment.confirm()
+  assert.equal(payment.paid.value, true)
+  assert.equal(payment.canPay.value, false)
+  assert.equal(payment.order.value.status, 'PENDING_SHIPMENT')
+  assert.deepEqual(
+    requests.slice(1).map((r) => [r.method, r.url]),
+    [
+      ['post', '/api/orders/JW202610190001/pay'],
+      ['get', '/api/orders/JW202610190001'],
+    ],
+  )
+})
+
+for (const checkout of [false, true]) {
+  test(`${checkout ? 'checkout' : 'order'} payment success survives refresh failure and prevents another pay`, async () => {
+    const { payment } = checkout ? await ready() : await readyPayment()
+    if (checkout) respondOrder({ orderNo: 'JW202610190001', payableAmountFen: 0 })
+    await payment.requestConfirmation()
+    assert.equal(typeof payment.confirm, 'function')
+    http.defaults.adapter = async (config) => {
+      requests.push(config)
+      if (config.method === 'get') throw new AxiosError('offline', 'ERR_NETWORK', config)
+      return { ...reply(config, []), data: { code: 200, message: 'OK', data: null } }
+    }
+    await payment.confirm()
+    assert.equal(payment.paid.value, true)
+    if (checkout) assert.equal(payment.confirmVisible.value, true)
+    assert.equal(payment.uncertain.value, false)
+    assert.equal(payment.canPay.value, false)
+    assert.match(payment.paymentError.value, /支付成功.*刷新/)
+    assert.equal(requests.filter((r) => r.url.endsWith('/pay')).length, 1)
+    await payment.confirm()
+    if (checkout) {
+      payment.cancel()
+      await payment.requestConfirmation()
+      assert.equal(payment.paid.value, true)
+    }
+    assert.equal(requests.filter((r) => r.url.endsWith('/pay')).length, 1)
+  })
+}
+
+test('checkout payment locks duplicate submissions and a new purchase until its result resolves', async () => {
+  const { payment } = await ready()
+  respondOrder({ orderNo: 'JW202610190001', payableAmountFen: 100 })
+  await payment.requestConfirmation()
+  assert.equal(typeof payment.confirm, 'function')
+  let release
+  http.defaults.adapter = (config) => {
+    requests.push(config)
+    if (config.method === 'get')
+      return Promise.reject(new AxiosError('offline', 'ERR_NETWORK', config))
+    return new Promise((resolve) => {
+      release = () =>
+        resolve({
+          ...reply(config, []),
+          data: { code: 200, message: 'OK', data: null },
+        })
+    })
+  }
+  const pending = payment.confirm()
+  await flush()
+  await payment.confirm()
+  payment.newPurchase()
+  assert.equal(payment.order.value.orderNo, 'JW202610190001')
+  release()
+  await pending
+  assert.equal(payment.paid.value, true)
+  assert.equal(requests.filter((r) => r.url.endsWith('/pay')).length, 1)
+})
+
+test('checkout unknown payment survives closing and cannot pay or start a new purchase before querying', async () => {
+  const { payment, visible } = await ready()
+  await payment.requestConfirmation()
+  assert.equal(typeof payment.confirm, 'function')
+  http.defaults.adapter = async (config) => {
+    requests.push(config)
+    throw new AxiosError('offline', 'ERR_NETWORK', config)
+  }
+  await payment.confirm()
+  assert.equal(payment.uncertain.value, true)
+  assert.equal(payment.paid.value, false)
+  payment.cancel()
+  visible.value = false
+  visible.value = true
+  payment.newPurchase()
+  await payment.requestConfirmation()
+  await payment.confirm()
+  assert.equal(payment.order.value.orderNo, 'JW202610190001')
+  assert.equal(requests.filter((r) => r.url.endsWith('/pay')).length, 1)
+  assert.equal(requests.filter((r) => r.url === '/api/orders').length, 1)
+})
+
+test('late checkout payment success cannot affect a new account order', async () => {
+  const { payment, auth } = await ready()
+  await payment.requestConfirmation()
+  assert.equal(typeof payment.confirm, 'function')
+  let release
+  http.defaults.adapter = (config) =>
+    new Promise((resolve) => {
+      requests.push(config)
+      release = () =>
+        resolve({ ...reply(config, []), data: { code: 200, message: 'OK', data: null } })
+    })
+  const pending = payment.confirm()
+  await flush()
+  saveSession('new-payment-account')
+  auth.getAuthorization()
+  Object.assign(payment.recipient.value, recipient)
+  respondOrder({ orderNo: 'JW888', payableAmountFen: 500 })
+  await payment.requestConfirmation()
+  release()
+  await pending
+  assert.equal(payment.order.value.orderNo, 'JW888')
+  assert.equal(payment.paid.value, false)
+  assert.equal(payment.confirmVisible.value, true)
+})
+
+test('business payment rejection with HTTP 200 displays the server reason and never shows success', async () => {
+  const { payment } = await readyPayment()
+  await payment.requestConfirmation()
+  http.defaults.adapter = async (config) => {
+    requests.push(config)
+    return { ...reply(config, []), data: { code: 409, message: '订单已取消', data: null } }
+  }
+  await payment.confirm()
+  assert.equal(payment.paid.value, false)
+  assert.equal(payment.paymentError.value, '订单已取消')
+  assert.equal(requests.length, 2)
+})

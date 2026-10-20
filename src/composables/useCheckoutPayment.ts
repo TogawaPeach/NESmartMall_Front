@@ -45,6 +45,8 @@ export function useCheckoutPayment(
     ...refs,
     requestConfirmation,
     cancel: checkout.cancel,
+    confirm: checkout.confirm,
+    refreshPayment: checkout.refreshPayment,
     newPurchase: checkout.newPurchase,
   }
 }

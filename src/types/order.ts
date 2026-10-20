@@ -58,6 +58,9 @@ export interface Order extends OrderSummary {
   logistics: { trackingNo: string } | null
 }
 
+/** Creation is enough to request payment; optional detail comes from order queries. */
+export type PaymentOrder = CreateOrderResult & Partial<Order>
+
 export type OrderLoadState =
   | 'loading'
   | 'success'

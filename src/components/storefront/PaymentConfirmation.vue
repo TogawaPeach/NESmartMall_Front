@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ElAlert, ElButton, ElDialog } from 'element-plus'
-import type { Order } from '@/types/order'
+import type { PaymentOrder } from '@/types/order'
 import { formatPriceFen } from '@/utils/price'
 
 defineProps<{
   visible: boolean
-  order: Order | null
+  order: PaymentOrder | null
   paying: boolean
   querying: boolean
   canPay: boolean
@@ -47,7 +47,7 @@ const emit = defineEmits<{ close: []; confirm: []; refresh: [] }>()
     <template #footer>
       <ElButton @click="emit('close')">暂不支付</ElButton>
       <ElButton
-        v-if="uncertain || !canPay"
+        v-if="uncertain || !canPay || error"
         :loading="querying"
         :disabled="paying"
         @click="emit('refresh')"
@@ -58,7 +58,7 @@ const emit = defineEmits<{ close: []; confirm: []; refresh: [] }>()
         :loading="paying"
         :disabled="!canPay || querying || paying"
         @click="emit('confirm')"
-        >确认模拟支付</ElButton
+        >立即支付</ElButton
       >
     </template>
   </ElDialog>

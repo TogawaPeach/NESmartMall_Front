@@ -258,7 +258,7 @@ export function orderMockPlugin(
           if (!['PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED'].includes(order.status))
             return send(409, null)
           if (scenario === 'pay-unknown') return send(500, null)
-          return send(200, currentSnapshot(order))
+          return send(200, null)
         }
         if (url.pathname !== '/api/orders') {
           const detail = data.find((o) => o.orderNo === url.pathname.split('/').pop())

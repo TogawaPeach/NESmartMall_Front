@@ -12,7 +12,7 @@ const props = defineProps<{
   items: CartItem[]
   totalFen: number
   quantity: number
-  refreshCart: () => Promise<unknown>
+  refreshCart?: () => Promise<unknown>
 }>()
 const {
   confirmVisible,
@@ -24,16 +24,23 @@ const {
   requestConfirmation,
   cancel,
   newPurchase,
-} = useCheckoutPayment(
-  visible,
-  () => props.items,
-  () => props.refreshCart(),
-)
+  confirm,
+  refreshPayment,
+  paying,
+  querying,
+  paid,
+  canPay,
+  uncertain,
+  paymentError,
+  paymentNotice,
+} = useCheckoutPayment(visible, () => props.items, props.refreshCart)
 const displayItems = computed(() =>
   props.items.map((item) => ({ ...item, key: item.cartItemId, subtotal: cartSubtotal(item) })),
 )
 const displayTotalFen = computed(() => order.value?.payableAmountFen ?? props.totalFen)
-const blocked = computed(() => loading.value || stage.value === 'unknown')
+const blocked = computed(
+  () => loading.value || stage.value === 'unknown' || paying.value || querying.value,
+)
 </script>
 
 <template>
@@ -156,9 +163,17 @@ const blocked = computed(() => loading.value || stage.value === 'unknown')
         </button>
         <p v-if="!order" class="receipt-disclaimer">将创建订单，模拟支付不会实际扣款</p>
         <div v-if="stage === 'unknown' || order" class="receipt-recovery">
-          <ElButton size="small" @click="props.refreshCart">刷新购物车</ElButton>
+          <ElButton v-if="props.refreshCart" size="small" @click="props.refreshCart"
+            >刷新购物车</ElButton
+          >
           <RouterLink :to="{ name: 'orders' }" @click="visible = false">我的订单</RouterLink>
-          <button v-if="order" class="receipt-new-purchase" type="button" @click="newPurchase">
+          <button
+            v-if="order"
+            class="receipt-new-purchase"
+            type="button"
+            :disabled="!props.items.length || paying || querying || uncertain"
+            @click="newPurchase"
+          >
             开始新的购买
           </button>
           <p>购物车清理可能延迟，请以我的订单为准。</p>
@@ -171,18 +186,32 @@ const blocked = computed(() => loading.value || stage.value === 'unknown')
   </ElDialog>
   <ElDialog
     :model-value="confirmVisible && visible"
-    title="订单创建成功"
+    :title="paid ? '支付成功' : '订单创建成功'"
     width="min(420px, calc(100vw - 32px))"
     align-center
     append-to-body
     destroy-on-close
     @update:model-value="!$event && cancel()"
   >
-    <div v-if="order" class="payment-confirmation" role="status" aria-live="polite">
+    <div
+      v-if="order"
+      class="payment-confirmation"
+      role="status"
+      aria-live="polite"
+      :aria-busy="paying || querying"
+    >
       <p class="receipt-order-no">订单号：{{ order.orderNo }}</p>
       <p>
         订单应付金额 <strong>¥{{ formatPriceFen(order.payableAmountFen) }}</strong>
       </p>
+      <p>{{ paymentNotice }}</p>
+      <ElAlert
+        v-if="paymentError"
+        :title="paymentError"
+        type="warning"
+        show-icon
+        :closable="false"
+      />
     </div>
     <RouterLink
       v-if="order"
@@ -190,7 +219,24 @@ const blocked = computed(() => loading.value || stage.value === 'unknown')
       @click="visible = false"
       >查看订单</RouterLink
     >
-    <template #footer><ElButton type="primary" @click="cancel">关闭</ElButton></template>
+    <template #footer>
+      <ElButton @click="cancel">{{ paid ? '关闭' : '暂不支付' }}</ElButton>
+      <ElButton
+        v-if="uncertain || paymentError || !canPay"
+        :loading="querying"
+        :disabled="paying || querying"
+        @click="refreshPayment()"
+        >刷新订单</ElButton
+      >
+      <ElButton
+        v-if="!paid"
+        type="primary"
+        :loading="paying"
+        :disabled="!canPay || paying || querying"
+        @click="confirm"
+        >立即支付</ElButton
+      >
+    </template>
   </ElDialog>
 </template>
 
@@ -282,7 +328,7 @@ const blocked = computed(() => loading.value || stage.value === 'unknown')
   overflow-wrap: anywhere;
 }
 .payment-confirmation strong {
-  color: #454b3d;
+  color: var(--el-text-color-primary);
   font-size: 20px;
   font-variant-numeric: tabular-nums;
 }

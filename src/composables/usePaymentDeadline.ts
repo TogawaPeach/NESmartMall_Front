@@ -29,7 +29,8 @@ export function usePaymentDeadline(source: () => OrderSummary | null) {
     if (!order || order.status !== 'PENDING_PAYMENT') return ''
     if (remainingMs.value === 0 || order.displayStatus === 'PAYMENT_EXPIRED')
       return '支付已超时，订单关闭处理中'
-    if (remainingMs.value === null || order.canPay !== true) return '付款信息暂未就绪，请刷新订单'
+    if (order.canPay === false) return '当前订单暂不可支付，请刷新订单'
+    if (remainingMs.value === null) return ''
     const seconds = Math.ceil(remainingMs.value / 1000)
     return `剩余支付时间 ${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
   })

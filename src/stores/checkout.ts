@@ -7,13 +7,15 @@ import {
   prepareCreateOrder,
 } from '@/api/orders'
 import { useAuthStore } from '@/stores/auth'
-import type { CreateOrderInput, CreateOrderResult, OrderRecipient } from '@/types/order'
+import { useOrderPayment } from '@/composables/useOrderPayment'
+import type { CreateOrderInput, PaymentOrder, OrderRecipient } from '@/types/order'
 
 /** In-memory, account-scoped intent. Dialogs and cart GETs cannot reset transaction facts. */
 export const useCheckoutStore = defineStore('checkout', () => {
   const auth = useAuthStore()
-  const order = shallowRef<CreateOrderResult | null>(null)
-  const confirmVisible = ref(false)
+  const order = shallowRef<PaymentOrder | null>(null)
+  const payment = useOrderPayment(order, { keepConfirmationOnSuccess: true })
+  const { confirmVisible } = payment
   const stage = ref<'draft' | 'creating' | 'unknown' | 'created'>('draft')
   const recipient = ref<OrderRecipient>({ name: '', phone: '', address: '' })
   const error = ref('')
@@ -70,14 +72,16 @@ export const useCheckoutStore = defineStore('checkout', () => {
     }
   }
   function newPurchase() {
-    if (stage.value !== 'created') return
-    order.value = null
-    confirmVisible.value = false
+    if (
+      stage.value !== 'created' ||
+      payment.paying.value ||
+      payment.querying.value ||
+      payment.uncertain.value
+    )
+      return
+    payment.reset()
     stage.value = 'draft'
     error.value = ''
-  }
-  function cancel() {
-    confirmVisible.value = false
   }
   return {
     order,
@@ -87,7 +91,16 @@ export const useCheckoutStore = defineStore('checkout', () => {
     loading,
     hasAttempt,
     confirmVisible,
-    cancel,
+    cancel: payment.cancel,
+    confirm: payment.confirm,
+    refreshPayment: payment.refresh,
+    paying: payment.paying,
+    querying: payment.querying,
+    paid: payment.paid,
+    canPay: payment.canPay,
+    uncertain: payment.uncertain,
+    paymentError: payment.paymentError,
+    paymentNotice: payment.paymentNotice,
     create,
     newPurchase,
   }

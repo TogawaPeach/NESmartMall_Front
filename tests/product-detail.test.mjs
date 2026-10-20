@@ -67,6 +67,7 @@ afterEach(() => {
   fixture?.app?.unmount()
   fixture?.auth.logout()
   fixture?.auth.$dispose()
+  fixture?.pinia?._s.forEach((store) => store.$dispose())
   fixture = undefined
 })
 after(async () => {
@@ -183,6 +184,7 @@ async function mount({
   authenticated = false,
   path = '/products/123',
   cartActions = false,
+  buyNowActions = false,
 } = {}) {
   if (authenticated)
     entries.set(
@@ -219,21 +221,147 @@ async function mount({
   const useAddToCart = cartActions
     ? (await server.ssrLoadModule('/src/composables/useAddToCart.ts')).useAddToCart
     : null
-  let detail, cart
+  let useBuyNow, useCheckoutPayment
+  if (buyNowActions) {
+    try {
+      ;({ useBuyNow } = await server.ssrLoadModule('/src/composables/useBuyNow.ts'))
+    } catch (error) {
+      if (error.code !== 'ERR_LOAD_URL') throw error
+    }
+    assert.equal(typeof useBuyNow, 'function', 'detail requires a single-product checkout entry')
+    ;({ useCheckoutPayment } = await server.ssrLoadModule('/src/composables/useCheckoutPayment.ts'))
+  }
+  let detail, cart, buyNow, payment
   const app = renderer.createApp({
     setup: () => {
       detail = useProductDetail()
       if (useAddToCart) cart = useAddToCart(detail.product)
+      if (useBuyNow) {
+        buyNow = useBuyNow(detail.product)
+        payment = useCheckoutPayment(buyNow.checkoutOpen, () => buyNow.items.value)
+      }
       return () => null
     },
   })
   app.use(pinia)
   app.use(router)
-  fixture = { app, auth, router }
+  fixture = { app, auth, router, pinia }
   app.mount({})
   await flush()
-  return { ...fixture, detail, cart }
+  return { ...fixture, detail, cart, buyNow, payment }
 }
+
+test('buy now opens one-item checkout without cart writes and submits only that product', async () => {
+  const { buyNow, payment } = await mount({ authenticated: true, buyNowActions: true })
+  buyNow.openCheckout()
+  assert.equal(buyNow.checkoutOpen.value, true)
+  assert.equal(buyNow.items.value.length, 1)
+  assert.equal(buyNow.items.value[0].quantity, 1)
+  assert.equal(buyNow.items.value[0].priceFen, 990000)
+  assert.equal(requests.length, 1, 'opening the receipt must not write or query the cart')
+  Object.assign(payment.recipient.value, {
+    name: '张三',
+    phone: '13800138000',
+    address: '上海市测试路 1 号',
+  })
+  http.defaults.adapter = async (config) => {
+    requests.push(config)
+    return response(config, {
+      code: 200,
+      message: 'OK',
+      data: { orderNo: 'JW123', payableAmountFen: 990000 },
+    })
+  }
+  await payment.requestConfirmation()
+  assert.deepEqual(
+    requests.map((config) => [config.method, config.url]),
+    [
+      ['get', '/api/products/123'],
+      ['post', '/api/orders'],
+    ],
+  )
+  assert.deepEqual(JSON.parse(requests.at(-1).data).items, [{ productId: '123', quantity: 1 }])
+  assert.equal(payment.confirmVisible.value, true)
+  buyNow.checkoutOpen.value = false
+  buyNow.openCheckout()
+  await payment.requestConfirmation()
+  assert.equal(requests.length, 2, 'reopening a known order must not create it again')
+})
+
+test('buy now requires login and rejects unavailable items while allowing a free product', async () => {
+  const { buyNow, detail } = await mount({ buyNowActions: true })
+  buyNow.openCheckout()
+  assert.equal(buyNow.checkoutOpen.value, false)
+  const { useLoginPromptStore } = await server.ssrLoadModule('/src/stores/loginPrompt.ts')
+  assert.equal(useLoginPromptStore().visible, true)
+  detail.product.value.stock = 0
+  assert.equal(buyNow.canPurchase.value, false)
+  detail.product.value.stock = 1
+  detail.product.value.priceFen = null
+  assert.equal(buyNow.canPurchase.value, false)
+  detail.product.value.priceFen = 0
+  assert.equal(buyNow.canPurchase.value, true)
+  assert.equal(requests.length, 1)
+})
+
+test('switching products or accounts closes buy-now checkout without losing an unknown order attempt', async () => {
+  const { buyNow, payment, router, auth } = await mount({
+    authenticated: true,
+    buyNowActions: true,
+    adapter: async (config) =>
+      response(config, {
+        code: 200,
+        data: product({ id: config.url.split('/').at(-1) }),
+      }),
+  })
+  buyNow.openCheckout()
+  Object.assign(payment.recipient.value, {
+    name: '张三',
+    phone: '13800138000',
+    address: '上海市测试路 1 号',
+  })
+  http.defaults.adapter = async (config) => {
+    requests.push(config)
+    if (config.method === 'post') throw new AxiosError('network', 'ERR_NETWORK', config)
+    return response(config, { code: 200, data: product({ id: '124' }) })
+  }
+  await payment.requestConfirmation()
+  assert.equal(payment.stage.value, 'unknown')
+  await router.push('/products/124')
+  await flush()
+  assert.equal(buyNow.checkoutOpen.value, false)
+  buyNow.openCheckout()
+  await payment.requestConfirmation()
+  assert.equal(payment.stage.value, 'unknown')
+  assert.equal(requests.filter((config) => config.method === 'post').length, 1)
+  auth.logout()
+  assert.equal(buyNow.checkoutOpen.value, false)
+  assert.equal(payment.stage.value, 'draft')
+})
+
+test('recovering an unknown purchase on an unavailable product never renders invalid receipt amounts', async () => {
+  const { buyNow, detail, payment } = await mount({ authenticated: true, buyNowActions: true })
+  buyNow.openCheckout()
+  Object.assign(payment.recipient.value, {
+    name: '张三',
+    phone: '13800138000',
+    address: '上海市测试路 1 号',
+  })
+  http.defaults.adapter = async () => {
+    throw new Error('network')
+  }
+  await payment.requestConfirmation()
+  assert.equal(payment.stage.value, 'unknown')
+  detail.product.value.priceFen = null
+  buyNow.openCheckout()
+  assert.equal(buyNow.checkoutOpen.value, true)
+  assert.deepEqual(buyNow.items.value, [])
+  detail.product.value.priceFen = 990000
+  detail.product.value.stock = 0
+  buyNow.openCheckout()
+  assert.deepEqual(buyNow.items.value, [])
+  assert.equal(payment.stage.value, 'unknown')
+})
 
 test('direct detail navigation and retry only query content and recover a network failure', async () => {
   let fail = true

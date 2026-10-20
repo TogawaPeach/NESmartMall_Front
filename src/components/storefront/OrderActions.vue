@@ -7,7 +7,13 @@ import { usePaymentDeadline } from '@/composables/usePaymentDeadline'
 import { ElAlert, ElButton, ElDialog, ElMessage } from 'element-plus'
 import { useConfirmReceipt } from '@/composables/useConfirmReceipt'
 import { useCancelOrder } from '@/composables/useCancelOrder'
-import type { CancelOrderResult, Order, OrderStatus, OrderSummary } from '@/types/order'
+import type {
+  CancelOrderResult,
+  Order,
+  OrderStatus,
+  OrderSummary,
+  PaymentOrder,
+} from '@/types/order'
 
 const props = defineProps<{ status: OrderStatus; orderNo: string; order?: OrderSummary }>()
 const emit = defineEmits<{ confirmed: []; changed: [result: CancelOrderResult | Order] }>()
@@ -15,12 +21,13 @@ const { visible, submitting, error, submitted, open, close, confirm } = useConfi
   () => props,
 )
 
-const paymentOrder = shallowRef<Order | null>(null)
+const paymentOrder = shallowRef<PaymentOrder | null>(null)
 const payment = useOrderPayment(paymentOrder)
-const { confirmVisible, paying, querying, canPay, uncertain, paymentNotice, paymentError } = payment
+const { confirmVisible, paying, querying, paid, canPay, uncertain, paymentNotice, paymentError } =
+  payment
 const cancellation = useCancelOrder(
   () => props,
-  () => confirmVisible.value || paying.value || querying.value || uncertain.value,
+  () => confirmVisible.value || paying.value || querying.value || uncertain.value || paid.value,
 )
 const {
   visible: cancelVisible,
@@ -46,9 +53,11 @@ async function refreshCancellation() {
 const deadline = usePaymentDeadline(() => props.order ?? null)
 const paymentReady = computed(
   () =>
-    props.order?.canPay === true &&
-    deadline.remainingMs.value !== null &&
-    deadline.remainingMs.value > 0,
+    props.status === 'PENDING_PAYMENT' &&
+    props.order?.canPay !== false &&
+    props.order?.displayStatus !== 'PAYMENT_EXPIRED' &&
+    deadline.remainingMs.value !== 0 &&
+    !paid.value,
 )
 async function openPayment() {
   if (
@@ -61,6 +70,9 @@ async function openPayment() {
     return
   confirmVisible.value = true
   await payment.refresh(props.orderNo)
+}
+async function refreshPayment() {
+  if (await payment.refresh(props.orderNo)) emit('confirmed')
 }
 watch(() => props.orderNo, payment.reset, { flush: 'sync' })
 watch(payment.paid, (value) => {
@@ -83,7 +95,12 @@ async function agree() {
     <template v-if="status === 'PENDING_PAYMENT'">
       <ElButton
         :disabled="
-          (cancelBlocking && !cancelUncertain) || confirmVisible || paying || querying || uncertain
+          (cancelBlocking && !cancelUncertain) ||
+          confirmVisible ||
+          paying ||
+          querying ||
+          uncertain ||
+          paid
         "
         :loading="cancelling || checkingCancel"
         @click="cancellation.open"
@@ -91,13 +108,22 @@ async function agree() {
       >
       <ElButton
         type="primary"
-        :disabled="!paymentReady || cancelVisible || cancelBlocking"
+        :disabled="!paymentReady || cancelVisible || cancelBlocking || uncertain || confirmVisible"
         :loading="querying || paying"
         @click="openPayment"
         >继续模拟支付</ElButton
       >
-      <OrderPaymentStatus v-if="order" :order="order" @expired="emit('confirmed')" />
-      <span v-else>付款信息暂未就绪，请刷新订单</span>
+      <span v-if="paid" role="status"
+        >{{ paymentNotice }}<span v-if="paymentError">；{{ paymentError }}</span></span
+      >
+      <OrderPaymentStatus v-else-if="order" :order="order" @expired="emit('confirmed')" />
+      <ElButton
+        v-if="uncertain || (paid && paymentError)"
+        :loading="querying"
+        :disabled="paying || querying"
+        @click="refreshPayment"
+        >刷新订单</ElButton
+      >
     </template>
     <ElButton v-else type="primary" :disabled="submitted" :loading="submitting" @click="open"
       >确认收货</ElButton
@@ -113,7 +139,7 @@ async function agree() {
       :error="paymentError"
       @close="payment.cancel"
       @confirm="payment.confirm"
-      @refresh="payment.refresh(props.orderNo)"
+      @refresh="refreshPayment"
     />
     <ElDialog
       :model-value="cancelVisible"

@@ -10,6 +10,7 @@ import type {
   OrderLoadState,
   OrderStatus,
   OrderSummary,
+  PaymentOrder,
 } from '@/types/order'
 
 export class OrderResponseError extends Error {
@@ -447,20 +448,6 @@ async function writeOrderData(
   return record(body.data)
 }
 
-async function writeOrder(path: string, options: SessionRequestOptions): Promise<Order> {
-  const value = await writeOrderData(path, undefined, options)
-  const order = readOrder(value)
-  if (
-    order.recipient.name.length > 100 ||
-    order.recipient.phone.length > 32 ||
-    order.recipient.address.length > 500 ||
-    order.discountAmountFen !== 0 ||
-    (order.paidAmountFen !== null && order.paidAmountFen !== order.payableAmountFen)
-  )
-    throw new OrderResponseError()
-  return order
-}
-
 export async function createOrder(
   input: CreateOrderInput,
   options: SessionRequestOptions = {},
@@ -473,10 +460,10 @@ export async function createOrder(
   }
 }
 
-export function isPaidOrder(order: Order): boolean {
+export function isPaidOrder(order: PaymentOrder): boolean {
   return (
-    ['PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED'].includes(order.status) &&
-    order.paidAt !== null &&
+    ['PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED'].includes(order.status ?? '') &&
+    typeof order.paidAt === 'string' &&
     order.paidAmountFen === order.payableAmountFen
   )
 }
@@ -484,8 +471,44 @@ export function isPaidOrder(order: Order): boolean {
 export async function payOrder(
   orderNo: string,
   options: SessionRequestOptions = {},
-): Promise<Order> {
-  const result = await writeOrder(`/api/orders/${orderNumber(orderNo)}/pay`, options)
-  if (result.orderNo !== orderNo || !isPaidOrder(result)) throw new OrderResponseError()
-  return result
+): Promise<void> {
+  const path = `/api/orders/${orderNumber(orderNo)}/pay`
+  try {
+    const response = await http.post<unknown>(path, undefined, options)
+    if (response.status !== 200) throw paymentRejection(response.data, response.status)
+    const body = record(response.data)
+    if (body.code !== 200) throw paymentRejection(body, body.code)
+    // The success Result is sufficient. Legacy detail is deliberately ignored.
+  } catch (cause) {
+    if (axios.isAxiosError(cause) && cause.response)
+      throw paymentRejection(cause.response.data, cause.response.status)
+    throw cause
+  }
+}
+
+function paymentRejection(body: unknown, status: unknown): OrderWriteError {
+  const value = body && typeof body === 'object' ? (body as Record<string, unknown>) : null
+  const fallback: Record<number, string> = {
+    400: '支付请求无效，请检查订单号',
+    401: '登录已过期，请重新登录后支付',
+    403: '无权支付此订单',
+    404: '订单不存在或支付服务暂未开放',
+    405: '支付服务暂未开放',
+    409: '订单状态已变化或支付已超时，请刷新订单',
+  }
+  const kind =
+    status === 401
+      ? 'login-required'
+      : status === 403
+        ? 'forbidden'
+        : status === 404 || status === 405
+          ? 'unavailable'
+          : status === 400 || status === 409
+            ? 'rejected'
+            : 'unknown'
+  const message =
+    kind !== 'unknown' && typeof value?.message === 'string' && value.message.trim()
+      ? value.message.trim()
+      : (fallback[Number(status)] ?? '支付结果暂未确认，请查看订单')
+  return new OrderWriteError(kind, message)
 }

@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import {
-  ElAlert,
-  ElButton,
-  ElIcon,
-  ElImage,
-  ElMessage,
-  ElSkeleton,
-  ElSkeletonItem,
-} from 'element-plus'
+import { ElAlert, ElButton, ElIcon, ElImage, ElSkeleton, ElSkeletonItem } from 'element-plus'
 import { Box, Picture, RefreshRight, Service, User, Warning } from '@element-plus/icons-vue'
 import StorefrontHeader from '@/components/storefront/StorefrontHeader.vue'
+import CheckoutReceipt from '@/components/storefront/CheckoutReceipt.vue'
 import { useProductDetail } from '@/composables/useProductDetail'
 import { useAddToCart } from '@/composables/useAddToCart'
+import { useBuyNow } from '@/composables/useBuyNow'
 import { useLoginPromptStore } from '@/stores/loginPrompt'
 import { formatPriceFen } from '@/utils/price'
 import { useCustomerServiceContext } from '@/composables/useCustomerServiceContext'
@@ -22,13 +16,17 @@ const loginPrompt = useLoginPromptStore()
 const { product, state, retry } = useProductDetail()
 const { consultProduct } = useCustomerServiceContext()
 const { adding, feedback, add: addToCart } = useAddToCart(product)
+const {
+  checkoutOpen,
+  canPurchase,
+  items: checkoutItems,
+  hasAttempt,
+  openCheckout,
+} = useBuyNow(product)
 const price = computed(() => {
   if (product.value?.priceFen === null || !product.value) return null
   return formatPriceFen(product.value.priceFen)
 })
-const canPurchase = computed(() =>
-  Boolean(product.value && product.value.stock > 0 && price.value !== null),
-)
 const stateCopy = computed(() => {
   switch (state.value) {
     case 'login-required':
@@ -44,11 +42,6 @@ const stateCopy = computed(() => {
       return { title: '商品详情加载失败', description: '请稍后重试' }
   }
 })
-
-function showPurchaseNotice() {
-  if (!canPurchase.value) return
-  ElMessage.info('购买功能暂未开放')
-}
 </script>
 
 <template>
@@ -142,7 +135,7 @@ function showPurchaseNotice() {
 
             <div class="purchase-area">
               <div class="purchase-actions">
-                <ElButton class="buy-button" :disabled="!canPurchase" @click="showPurchaseNotice"
+                <ElButton class="buy-button" :disabled="!canPurchase" @click="openCheckout"
                   >立即购买</ElButton
                 >
                 <ElButton
@@ -153,6 +146,7 @@ function showPurchaseNotice() {
                   >加入购物车</ElButton
                 >
               </div>
+              <ElButton v-if="hasAttempt" text @click="openCheckout">查看本次下单状态</ElButton>
               <ElButton
                 class="product-support-button"
                 text
@@ -226,6 +220,12 @@ function showPurchaseNotice() {
     </main>
 
     <footer class="storefront-footer">经纬智选 · 测绘工具商城</footer>
+    <CheckoutReceipt
+      v-model="checkoutOpen"
+      :items="checkoutItems"
+      :total-fen="product?.priceFen ?? 0"
+      :quantity="checkoutItems.length"
+    />
   </div>
 </template>
 

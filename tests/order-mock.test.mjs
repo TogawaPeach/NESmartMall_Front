@@ -112,11 +112,14 @@ test('explicit mock creates authoritative snapshots, preserves carts, pays idemp
   assert.equal(detail.items[0].unitPriceFen, 134400)
   assert.equal(Date.parse(detail.payExpireAt) - Date.parse(detail.createdAt), 900000)
   const paid = await (await request(`${path}/pay`, true, { method: 'POST' })).json()
-  assert.equal(paid.data.status, 'PENDING_SHIPMENT')
-  assert.equal(paid.data.paidAmountFen, 270000)
-  assert.equal(paid.data.canPay, false)
+  assert.deepEqual(paid, { code: 200, message: 'OK', data: null })
+  const paidDetail = (await (await request(path)).json()).data
+  assert.equal(paidDetail.status, 'PENDING_SHIPMENT')
+  assert.equal(paidDetail.paidAmountFen, 270000)
+  assert.equal(paidDetail.canPay, false)
   const again = await (await request(`${path}/pay`, true, { method: 'POST' })).json()
-  assert.equal(again.data.paidAt, paid.data.paidAt)
+  assert.deepEqual(again, paid)
+  assert.equal((await (await request(path)).json()).data.paidAt, paidDetail.paidAt)
   assert.equal((await request(`${path}/pay`, false, { method: 'POST' })).status, 401)
   const zero = await (
     await request(
