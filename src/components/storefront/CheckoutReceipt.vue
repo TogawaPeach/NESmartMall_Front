@@ -5,7 +5,6 @@ import type { CartItem } from '@/types/cart'
 import { formatPriceFen } from '@/utils/price'
 import { cartSubtotal } from '@/utils/cart'
 import { useCheckoutPayment } from '@/composables/useCheckoutPayment'
-import PaymentConfirmation from './PaymentConfirmation.vue'
 
 const visible = defineModel<boolean>({ required: true })
 const receiptFormId = useId()
@@ -19,20 +18,11 @@ const {
   confirmVisible,
   loading,
   error,
-  paid,
   order,
   stage,
   recipient,
-  paying,
-  querying,
-  canPay,
-  uncertain,
-  paymentError,
-  paymentNotice,
   requestConfirmation,
   cancel,
-  confirm,
-  refreshOrder,
   newPurchase,
 } = useCheckoutPayment(
   visible,
@@ -40,24 +30,10 @@ const {
   () => props.refreshCart(),
 )
 const displayItems = computed(() =>
-  order.value
-    ? order.value.items.map((item) => ({
-        ...item,
-        key: item.id,
-        priceFen: item.unitPriceFen,
-        subtotal: item.unitPriceFen * item.quantity,
-      }))
-    : props.items.map((item) => ({ ...item, key: item.cartItemId, subtotal: cartSubtotal(item) })),
+  props.items.map((item) => ({ ...item, key: item.cartItemId, subtotal: cartSubtotal(item) })),
 )
 const displayTotalFen = computed(() => order.value?.payableAmountFen ?? props.totalFen)
-const displayQuantity = computed(() =>
-  order.value
-    ? order.value.items.reduce((sum, item) => sum + BigInt(item.quantity), 0n).toString()
-    : props.quantity,
-)
-const blocked = computed(
-  () => loading.value || stage.value === 'unknown' || paying.value || querying.value,
-)
+const blocked = computed(() => loading.value || stage.value === 'unknown')
 </script>
 
 <template>
@@ -65,7 +41,7 @@ const blocked = computed(
     v-model="visible"
     class="checkout-receipt"
     modal-class="checkout-receipt-overlay"
-    :title="paid ? '模拟支付成功' : '结算小票'"
+    :title="order ? '订单已创建' : '结算小票'"
     width="380px"
     align-center
     append-to-body
@@ -88,19 +64,13 @@ const blocked = computed(
       </div>
       <div class="receipt-heading">
         <p class="receipt-brand">经纬智选</p>
-        <h2 :id="titleId">{{ paid ? '模拟支付成功' : '结算小票' }}</h2>
+        <h2 :id="titleId">{{ order ? '订单已创建' : '结算小票' }}</h2>
       </div>
     </template>
-    <form
-      :id="receiptFormId"
-      class="receipt-content"
-      @submit.prevent="paid ? (visible = false) : requestConfirmation()"
-    >
-      <div class="receipt-section-label">
-        <span>{{ order ? '订单成交明细' : '商品参考明细' }}</span>
-      </div>
+    <form :id="receiptFormId" class="receipt-content" @submit.prevent="requestConfirmation()">
+      <div v-if="!order" class="receipt-section-label"><span>商品参考明细</span></div>
       <p v-if="order" class="receipt-order-no">订单号：{{ order.orderNo }}</p>
-      <ul class="receipt-items" aria-label="本次结算商品" tabindex="0">
+      <ul v-if="!order" class="receipt-items" aria-label="本次结算商品" tabindex="0">
         <li v-for="item in displayItems" :key="item.key" class="receipt-item">
           <div class="receipt-item-description">
             <span class="receipt-item-name">{{ item.name }}</span>
@@ -117,15 +87,10 @@ const blocked = computed(
       <div class="receipt-total">
         <div>
           <span>{{ order ? '订单应付金额' : '参考合计金额' }}</span
-          ><small>共 {{ displayItems.length }} 款 / {{ displayQuantity }} 件</small>
+          ><small v-if="!order">共 {{ displayItems.length }} 款 / {{ props.quantity }} 件</small>
         </div>
         <strong><span>¥</span>{{ formatPriceFen(displayTotalFen) }}</strong>
       </div>
-      <p v-if="order" class="receipt-payment-note">
-        商品 ¥{{ formatPriceFen(order.goodsAmountFen) }} · 运费 ¥{{
-          formatPriceFen(order.shippingFeeFen)
-        }}
-      </p>
       <fieldset v-if="!order" class="receipt-recipient" :disabled="blocked">
         <legend>收货信息</legend>
         <label for="recipient-name">收货姓名</label>
@@ -159,18 +124,6 @@ const blocked = computed(
           required
         />
       </fieldset>
-      <div v-else class="receipt-recipient-snapshot">
-        <p>{{ order.recipient.name }} · {{ order.recipient.phone }}</p>
-        <p>{{ order.recipient.address }}</p>
-      </div>
-      <div v-if="paid || order" class="receipt-payment" role="status" aria-live="polite">
-        <template v-if="paid"
-          ><div class="receipt-success-mark" aria-hidden="true">✓</div>
-          <p class="receipt-success-title">支付成功</p>
-          <p class="receipt-payment-note">本次为模拟支付，未产生实际扣款</p></template
-        >
-        <p v-else-if="order" class="receipt-payment-note">{{ paymentNotice }}</p>
-      </div>
     </form>
     <template #footer>
       <div class="receipt-actions">
@@ -190,30 +143,22 @@ const blocked = computed(
           :disabled="blocked || confirmVisible"
         >
           {{
-            paid
-              ? '完成，继续逛逛'
-              : loading
-                ? '正在创建订单…'
-                : stage === 'unknown'
-                  ? '下单结果暂未确认'
-                  : order
-                    ? '查看原单支付'
-                    : '模拟支付'
+            loading
+              ? '正在创建订单…'
+              : stage === 'unknown'
+                ? '下单结果暂未确认'
+                : order
+                  ? '查看创建结果'
+                  : '模拟支付'
           }}
-          <span v-if="!paid">¥{{ formatPriceFen(displayTotalFen) }}</span
+          <span>¥{{ formatPriceFen(displayTotalFen) }}</span
           ><span aria-hidden="true">↗</span>
         </button>
-        <p v-if="!paid" class="receipt-disclaimer">将创建订单，模拟支付不会实际扣款</p>
+        <p v-if="!order" class="receipt-disclaimer">将创建订单，模拟支付不会实际扣款</p>
         <div v-if="stage === 'unknown' || order" class="receipt-recovery">
           <ElButton size="small" @click="props.refreshCart">刷新购物车</ElButton>
           <RouterLink :to="{ name: 'orders' }" @click="visible = false">我的订单</RouterLink>
-          <button
-            v-if="order && !uncertain"
-            class="receipt-new-purchase"
-            type="button"
-            :disabled="paying || querying"
-            @click="newPurchase"
-          >
+          <button v-if="order" class="receipt-new-purchase" type="button" @click="newPurchase">
             开始新的购买
           </button>
           <p>购物车清理可能延迟，请以我的订单为准。</p>
@@ -224,19 +169,29 @@ const blocked = computed(
       </div>
     </template>
   </ElDialog>
-  <PaymentConfirmation
-    :visible="confirmVisible && visible"
-    :order="order"
-    :paying="paying"
-    :querying="querying"
-    :can-pay="canPay"
-    :uncertain="uncertain"
-    :notice="paymentNotice"
-    :error="paymentError"
-    @close="cancel"
-    @confirm="confirm"
-    @refresh="refreshOrder()"
-  />
+  <ElDialog
+    :model-value="confirmVisible && visible"
+    title="订单创建成功"
+    width="min(420px, calc(100vw - 32px))"
+    align-center
+    append-to-body
+    destroy-on-close
+    @update:model-value="!$event && cancel()"
+  >
+    <div v-if="order" class="payment-confirmation" role="status" aria-live="polite">
+      <p class="receipt-order-no">订单号：{{ order.orderNo }}</p>
+      <p>
+        订单应付金额 <strong>¥{{ formatPriceFen(order.payableAmountFen) }}</strong>
+      </p>
+    </div>
+    <RouterLink
+      v-if="order"
+      :to="{ name: 'order-detail', params: { orderNo: order.orderNo } }"
+      @click="visible = false"
+      >查看订单</RouterLink
+    >
+    <template #footer><ElButton type="primary" @click="cancel">关闭</ElButton></template>
+  </ElDialog>
 </template>
 
 <style scoped>

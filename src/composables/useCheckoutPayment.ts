@@ -16,12 +16,10 @@ export function useCheckoutPayment(
   async function requestConfirmation() {
     if (!visible.value || disposed) return
     const authorization = auth.getAuthorization()
-    const knownOrder = checkout.order?.orderNo
     const created = await checkout.create(
       items().map(({ productId, quantity }) => ({ productId, quantity })),
     )
     if (auth.getAuthorization() !== authorization) return
-    if (knownOrder && !disposed && visible.value) await checkout.refresh(knownOrder)
     if (!visible.value || disposed) checkout.cancel()
     // Cart cleanup is asynchronous. Its failure cannot change a committed order.
     if (created && !disposed && refreshCart) {
@@ -47,8 +45,6 @@ export function useCheckoutPayment(
     ...refs,
     requestConfirmation,
     cancel: checkout.cancel,
-    confirm: checkout.confirm,
-    refreshOrder: checkout.refresh,
     newPurchase: checkout.newPurchase,
   }
 }

@@ -4,7 +4,14 @@ import { createServer } from 'vite'
 import { createRenderer, ref } from 'vue'
 import { AxiosError } from 'axios'
 
-let server, http, configureAuth, createPinia, useAuthStore, useCheckoutPayment, fixture
+let server,
+  http,
+  configureAuth,
+  createPinia,
+  useAuthStore,
+  useCheckoutPayment,
+  useOrderPayment,
+  fixture
 const entries = new Map()
 const requests = []
 const item = (overrides = {}) => ({
@@ -61,6 +68,7 @@ before(async () => {
     appType: 'custom',
   })
   ;({ http, configureAuth } = await server.ssrLoadModule('/src/api/http.ts'))
+  ;({ useOrderPayment } = await server.ssrLoadModule('/src/composables/useOrderPayment.ts'))
   ;({ createPinia } = await server.ssrLoadModule('pinia'))
   ;({ useAuthStore } = await server.ssrLoadModule('/src/stores/auth.ts'))
   try {
@@ -96,7 +104,7 @@ after(async () => {
   delete globalThis.sessionStorage
   delete globalThis.window
 })
-async function mount(authenticated = true, refreshCart) {
+async function mount(authenticated = true, refreshCart, orderPayment = false) {
   assert.equal(typeof useCheckoutPayment, 'function', 'checkout requires a price-confirmation flow')
   if (authenticated) saveSession()
   const pinia = createPinia()
@@ -114,7 +122,21 @@ async function mount(authenticated = true, refreshCart) {
   })
   const app = renderer.createApp({
     setup() {
-      payment = useCheckoutPayment(visible, () => selected.value, refreshCart)
+      if (orderPayment) {
+        const order = ref(null)
+        const actions = useOrderPayment(order)
+        payment = {
+          ...actions,
+          order,
+          refreshOrder: actions.refresh,
+          async requestConfirmation() {
+            await actions.refresh('JW202610190001')
+            actions.confirmVisible.value = true
+          },
+        }
+      } else {
+        payment = useCheckoutPayment(visible, () => selected.value, refreshCart)
+      }
       return () => null
     },
   })
@@ -174,6 +196,13 @@ async function ready() {
   return result
 }
 
+// Exercise the existing order-page payment flow independently of order creation.
+async function readyPayment() {
+  const result = await mount(true, undefined, true)
+  respondOrder()
+  return result
+}
+
 test('opening receipt and invalid recipient never writes; create uses selected IDs and recipient only', async () => {
   const { payment } = await mount()
   assert.equal(requests.length, 0)
@@ -196,10 +225,8 @@ test('opening receipt and invalid recipient never writes; create uses selected I
   })
   assert.equal(request.headers.has('Idempotency-Key'), false)
   assert.equal(request.headers.get('Authorization'), 'Bearer checkout-token')
-  assert.equal(payment.order.value.items[0].name, '服务端快照')
   assert.equal(payment.order.value.payableAmountFen, 100)
   assert.equal(payment.confirmVisible.value, true)
-  assert.equal(payment.paid.value, false)
 })
 
 test('creation locks duplicate clicks; closing and selection cleanup preserve frozen order', async () => {
@@ -245,9 +272,6 @@ test('creation without payment eligibility fields opens confirmation with server
   assert.equal(payment.confirmVisible.value, true)
   assert.equal(payment.order.value.orderNo, 'JW1980123456789012300')
   assert.equal(payment.order.value.payableAmountFen, 990)
-  assert.equal(payment.canPay.value, false)
-  assert.match(payment.paymentNotice.value, /付款信息暂未就绪/)
-  await payment.confirm()
   assert.equal(requests.length, 1)
 })
 
@@ -267,9 +291,8 @@ test('current backend response with only payExpireAt opens confirmation instead 
   assert.equal(payment.confirmVisible.value, true)
   assert.equal(payment.order.value.orderNo, 'JW1980123456789012301')
   assert.equal(payment.order.value.payableAmountFen, 14700)
-  assert.equal(payment.order.value.payExpireAt, data.payExpireAt)
   assert.equal(payment.error.value, '')
-  assert.equal(payment.canPay.value, false)
+  assert.deepEqual(Object.keys(payment.order.value).sort(), ['orderNo', 'payableAmountFen'])
 })
 
 for (const failure of ['network', 'timeout', '500', 'malformed']) {
@@ -302,12 +325,9 @@ for (const failure of ['network', 'timeout', '500', 'malformed']) {
 }
 
 test('zero-yuan payment uses /pay without body and only explicit paid response succeeds', async () => {
-  const { payment, visible } = await ready()
+  const { payment, visible } = await readyPayment()
   respondOrder(snapshot({ shippingFeeFen: 0, payableAmountFen: 0 }))
   await payment.requestConfirmation()
-  payment.cancel()
-  await payment.requestConfirmation()
-  assert.equal(requests.filter((r) => r.method === 'post').length, 1)
   respondOrder(
     snapshot({
       shippingFeeFen: 0,
@@ -329,7 +349,7 @@ test('zero-yuan payment uses /pay without body and only explicit paid response s
 })
 
 test('unknown payment queries by known orderNo; failed recovery never shows paid or creates again', async () => {
-  const { payment } = await ready()
+  const { payment } = await readyPayment()
   await payment.requestConfirmation()
   http.defaults.adapter = async (config) => {
     requests.push(config)
@@ -346,11 +366,11 @@ test('unknown payment queries by known orderNo; failed recovery never shows paid
     ],
   )
   await payment.requestConfirmation()
-  assert.equal(requests.filter((r) => r.url === '/api/orders' && r.method === 'post').length, 1)
+  assert.equal(requests.filter((r) => r.url === '/api/orders' && r.method === 'post').length, 0)
 })
 
 test('expired and legacy orders stay queryable but cannot pay', async () => {
-  const { payment } = await ready()
+  const { payment } = await readyPayment()
   const expired = snapshot({
     serverTime: '2026-10-19T00:16:00Z',
     createdAt: '2026-10-19T00:00:00Z',
@@ -391,17 +411,19 @@ test('account switch isolates pending creation and clears recipient and old orde
   assert.equal(payment.recipient.value.name, '')
 })
 
-test('strict create response rejects missing fields, wrong totals, empty items and unsafe amounts', async () => {
+test('create response validates only order number and a nonnegative safe integer amount', async () => {
   const { createOrder, prepareCreateOrder } = await server.ssrLoadModule('/src/api/orders.ts')
   assert.equal(typeof createOrder, 'function')
   const intent = { items: [{ productId: '43', quantity: 1 }], recipient }
   for (const data of [
-    snapshot({ items: [] }),
-    snapshot({ payExpireAt: undefined }),
-    snapshot({ payableAmountFen: 2 }),
-    snapshot({ goodsAmountFen: Number.MAX_SAFE_INTEGER + 1 }),
-    snapshot({ orderNo: 'bad' }),
-    snapshot({ status: 'PENDING_SHIPMENT' }),
+    {},
+    { orderNo: 'JW123' },
+    { payableAmountFen: 100 },
+    { orderNo: 'bad', payableAmountFen: 100 },
+    { orderNo: 'JW123', payableAmountFen: -1 },
+    { orderNo: 'JW123', payableAmountFen: 1.5 },
+    { orderNo: 'JW123', payableAmountFen: '100' },
+    { orderNo: 'JW123', payableAmountFen: Number.MAX_SAFE_INTEGER + 1 },
   ]) {
     respondOrder(data)
     await assert.rejects(createOrder(intent))
@@ -442,7 +464,7 @@ test('cart refresh failure never undoes creation or permits a second create', as
 })
 
 test('malformed or wrong-number pay response can only recover through matching GET', async () => {
-  const { payment } = await ready()
+  const { payment } = await readyPayment()
   await payment.requestConfirmation()
   const paid = snapshot({
     status: 'PENDING_SHIPMENT',
@@ -481,14 +503,13 @@ for (const status of [400, 409, 401, 403, 404, 405]) {
     }
     await payment.requestConfirmation()
     assert.equal(payment.order.value, null)
-    assert.equal(payment.paid.value, false)
     assert.notEqual(payment.stage.value, 'unknown')
     if (status === 404 || status === 405) assert.match(payment.error.value, /暂未开放/)
   })
 }
 
 test('explicit /pay unavailability is visible instead of silently enabling another attempt', async () => {
-  const { payment } = await ready()
+  const { payment } = await readyPayment()
   await payment.requestConfirmation()
   http.defaults.adapter = async (config) => {
     requests.push(config)
@@ -500,17 +521,15 @@ test('explicit /pay unavailability is visible instead of silently enabling anoth
     return { ...reply(config, []), data: { code: 200, message: 'OK', data: snapshot() } }
   }
   await payment.confirm()
-  assert.match(payment.paymentError.value, /暂未开放/)
   assert.equal(payment.paid.value, false)
+  assert.match(payment.paymentError.value, /暂未开放/)
 })
 
-test('strict successful writes require message OK and response recipient boundaries', async () => {
+test('create ignores unrelated detail fields but still requires message OK', async () => {
   const { createOrder } = await server.ssrLoadModule('/src/api/orders.ts')
   const input = { items: [{ productId: '43', quantity: 1 }], recipient }
-  for (const recipientOverride of [{ name: 'a'.repeat(101) }, { address: 'a'.repeat(501) }]) {
-    respondOrder(snapshot({ recipient: { ...recipient, ...recipientOverride } }))
-    await assert.rejects(createOrder(input))
-  }
+  respondOrder(snapshot({ items: [], recipient: null, status: 'irrelevant' }))
+  assert.deepEqual(await createOrder(input), { orderNo: 'JW202610190001', payableAmountFen: 100 })
   http.defaults.adapter = async (config) => ({
     ...reply(config, []),
     data: { code: 200, message: 'not OK', data: snapshot() },
@@ -562,7 +581,7 @@ test('server countdown expires exactly once, queries original order and never fa
   let monotonic = 0
   mock.method(performance, 'now', () => monotonic)
   mock.timers.enable({ apis: ['setInterval'] })
-  const { payment } = await ready()
+  const { payment } = await readyPayment()
   const serverTime = '2026-10-19T00:14:59Z'
   const expiry = {
     createdAt: '2026-10-19T00:00:00Z',
@@ -592,13 +611,13 @@ test('server countdown expires exactly once, queries original order and never fa
   monotonic = 6000
   mock.timers.tick(5000)
   await flush()
-  assert.equal(requests.filter((r) => r.method === 'get').length, 1)
+  assert.equal(requests.filter((r) => r.method === 'get').length, 2)
   assert.equal(requests.filter((r) => r.url.endsWith('/pay')).length, 0)
 })
 
 for (const action of ['create', 'pay']) {
   test(`account switch before Axios interceptor prevents old ${action} request using new Bearer`, async () => {
-    const { payment, auth } = await ready()
+    const { payment, auth } = action === 'pay' ? await readyPayment() : await ready()
     if (action === 'pay') await payment.requestConfirmation()
     const count = requests.length
     const pending = action === 'create' ? payment.requestConfirmation() : payment.confirm()
@@ -611,7 +630,7 @@ for (const action of ['create', 'pay']) {
 }
 
 test('stale explicit order refresh cannot use a newly switched account', async () => {
-  const { payment, auth } = await ready()
+  const { payment, auth } = await readyPayment()
   await payment.requestConfirmation()
   const known = payment.order.value.orderNo
   const count = requests.length
@@ -621,3 +640,22 @@ test('stale explicit order refresh cannot use a newly switched account', async (
   assert.equal(requests.length, count)
   assert.equal(payment.order.value, null)
 })
+
+for (const payableAmountFen of [0, 13440]) {
+  test(`minimal creation result opens result dialog with amount ${payableAmountFen} and reopens without requests`, async () => {
+    const { payment, visible } = await ready()
+    const result = { orderNo: 'JW1980123456789012345', payableAmountFen }
+    respondOrder(result)
+    await payment.requestConfirmation()
+    assert.equal(payment.stage.value, 'created')
+    assert.deepEqual(payment.order.value, result)
+    assert.equal(payment.confirmVisible.value, true)
+    payment.cancel()
+    visible.value = false
+    visible.value = true
+    await payment.requestConfirmation()
+    assert.equal(payment.confirmVisible.value, true)
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].url, '/api/orders')
+  })
+}

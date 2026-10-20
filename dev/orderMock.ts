@@ -218,7 +218,12 @@ export function orderMockPlugin(
               }
               data.unshift(order)
               if (scenario === 'create-unknown') return send(500, null)
-              return send(200, scenario === 'create-malformed' ? {} : currentSnapshot(order))
+              return send(
+                200,
+                scenario === 'create-malformed'
+                  ? {}
+                  : { orderNo: order.orderNo, payableAmountFen: order.payableAmountFen },
+              )
             } catch {
               return send(400, null)
             }

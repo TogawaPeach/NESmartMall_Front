@@ -3,6 +3,7 @@ import { http, type SessionRequestOptions } from './http'
 import { isOrderStatus } from '@/constants/orderStatus'
 import type {
   CreateOrderInput,
+  CreateOrderResult,
   Order,
   OrderItem,
   OrderLoadState,
@@ -374,11 +375,11 @@ function writeRejection(status: unknown): OrderWriteError {
   return new OrderWriteError('unknown', CREATE_UNKNOWN_MESSAGE)
 }
 
-async function writeOrder(
+async function writeOrderData(
   path: string,
   input?: CreateOrderInput,
   options: SessionRequestOptions = {},
-): Promise<Order> {
+): Promise<Record<string, unknown>> {
   let response
   try {
     response = await http.post<unknown>(path, input, options)
@@ -390,9 +391,11 @@ async function writeOrder(
   const body = record(response.data)
   if (body.code !== 200) throw writeRejection(body.code)
   if (body.message !== 'OK') throw new OrderResponseError()
-  const value = record(body.data)
-  // Legacy responses still carry the order number and amount needed by the dialog.
-  // readOrder validates eligibility when present; missing eligibility cannot enable payment.
+  return record(body.data)
+}
+
+async function writeOrder(path: string, options: SessionRequestOptions): Promise<Order> {
+  const value = await writeOrderData(path, undefined, options)
   const order = readOrder(value)
   if (
     order.recipient.name.length > 100 ||
@@ -408,11 +411,13 @@ async function writeOrder(
 export async function createOrder(
   input: CreateOrderInput,
   options: SessionRequestOptions = {},
-): Promise<Order> {
+): Promise<CreateOrderResult> {
   const intent = prepareCreateOrder(input)
-  const result = await writeOrder('/api/orders', intent, options)
-  if (result.status !== 'PENDING_PAYMENT') throw new OrderResponseError()
-  return result
+  const result = await writeOrderData('/api/orders', intent, options)
+  return {
+    orderNo: orderNumber(result.orderNo),
+    payableAmountFen: count(result.payableAmountFen),
+  }
 }
 
 export function isPaidOrder(order: Order): boolean {
@@ -427,7 +432,7 @@ export async function payOrder(
   orderNo: string,
   options: SessionRequestOptions = {},
 ): Promise<Order> {
-  const result = await writeOrder(`/api/orders/${orderNumber(orderNo)}/pay`, undefined, options)
+  const result = await writeOrder(`/api/orders/${orderNumber(orderNo)}/pay`, options)
   if (result.orderNo !== orderNo || !isPaidOrder(result)) throw new OrderResponseError()
   return result
 }

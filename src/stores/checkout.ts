@@ -6,24 +6,24 @@ import {
   OrderWriteError,
   prepareCreateOrder,
 } from '@/api/orders'
-import { useOrderPayment } from '@/composables/useOrderPayment'
 import { useAuthStore } from '@/stores/auth'
-import type { CreateOrderInput, Order, OrderRecipient } from '@/types/order'
+import type { CreateOrderInput, CreateOrderResult, OrderRecipient } from '@/types/order'
 
 /** In-memory, account-scoped intent. Dialogs and cart GETs cannot reset transaction facts. */
 export const useCheckoutStore = defineStore('checkout', () => {
   const auth = useAuthStore()
-  const order = shallowRef<Order | null>(null)
+  const order = shallowRef<CreateOrderResult | null>(null)
+  const confirmVisible = ref(false)
   const stage = ref<'draft' | 'creating' | 'unknown' | 'created'>('draft')
   const recipient = ref<OrderRecipient>({ name: '', phone: '', address: '' })
   const error = ref('')
-  const payment = useOrderPayment(order)
   const loading = computed(() => stage.value === 'creating')
   const hasAttempt = computed(() => stage.value !== 'draft')
   let revision = 0
   function resetAccount() {
     revision++
-    payment.reset()
+    order.value = null
+    confirmVisible.value = false
     stage.value = 'draft'
     recipient.value = { name: '', phone: '', address: '' }
     error.value = ''
@@ -37,7 +37,7 @@ export const useCheckoutStore = defineStore('checkout', () => {
     const authorization = auth.getAuthorization()
     if (!authorization || stage.value === 'creating' || stage.value === 'unknown') return false
     if (order.value) {
-      payment.confirmVisible.value = true
+      confirmVisible.value = true
       return false
     }
     let intent: CreateOrderInput
@@ -55,7 +55,7 @@ export const useCheckoutStore = defineStore('checkout', () => {
       if (auth.getAuthorization() !== authorization || revision !== current) return false
       order.value = result
       stage.value = 'created'
-      payment.confirmVisible.value = true
+      confirmVisible.value = true
       return true
     } catch (cause) {
       if (auth.getAuthorization() !== authorization || revision !== current) return false
@@ -70,16 +70,25 @@ export const useCheckoutStore = defineStore('checkout', () => {
     }
   }
   function newPurchase() {
-    if (
-      stage.value !== 'created' ||
-      payment.paying.value ||
-      payment.querying.value ||
-      payment.uncertain.value
-    )
-      return
-    payment.reset()
+    if (stage.value !== 'created') return
+    order.value = null
+    confirmVisible.value = false
     stage.value = 'draft'
     error.value = ''
   }
-  return { order, stage, recipient, error, loading, hasAttempt, ...payment, create, newPurchase }
+  function cancel() {
+    confirmVisible.value = false
+  }
+  return {
+    order,
+    stage,
+    recipient,
+    error,
+    loading,
+    hasAttempt,
+    confirmVisible,
+    cancel,
+    create,
+    newPurchase,
+  }
 })

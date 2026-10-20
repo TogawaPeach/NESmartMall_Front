@@ -35,6 +35,11 @@ export interface CreateOrderInput {
   recipient: OrderRecipient
 }
 
+export interface CreateOrderResult {
+  orderNo: string
+  payableAmountFen: number
+}
+
 export interface Order extends OrderSummary {
   paidAt: string | null
   shippedAt: string | null
