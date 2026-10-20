@@ -15,6 +15,16 @@ const router = createRouter({
   },
   routes: [
     {
+      path: '/merchant',
+      redirect: { name: 'merchant-products' },
+    },
+    {
+      path: '/merchant/products',
+      name: 'merchant-products',
+      component: () => import('../views/MerchantProductsView.vue'),
+      meta: { merchantOnly: true },
+    },
+    {
       path: '/',
       name: 'home',
       component: HomeView,

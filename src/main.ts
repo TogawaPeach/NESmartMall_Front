@@ -9,11 +9,13 @@ import App from './App.vue'
 import router from './router'
 import { useAuthStore } from './stores/auth'
 import { configureAuth } from './api/http'
+import { installMerchantAccess } from './router/merchantAccess'
 
 const app = createApp(App)
 
 app.use(createPinia())
 configureAuth(useAuthStore())
+installMerchantAccess(router, useAuthStore())
 app.use(router)
 
 app.mount('#app')

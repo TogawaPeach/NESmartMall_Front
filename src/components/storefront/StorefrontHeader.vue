@@ -86,6 +86,14 @@ function openUtility(route: string) {
   }
 }
 
+function accountCommand(command: string) {
+  if (command === 'merchant' && auth.user?.role === 0) {
+    void router.push({ name: 'merchant-products' })
+  } else if (command === 'logout') {
+    auth.logout()
+  }
+}
+
 function handleSearchEnter(event: KeyboardEvent | Event) {
   if (!(event instanceof KeyboardEvent) || event.isComposing || event.keyCode === 229) return
   event.preventDefault()
@@ -198,7 +206,7 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
             <ElIcon aria-hidden="true"><User /></ElIcon>
           </ElButton>
         </ElTooltip>
-        <ElDropdown v-else trigger="click" placement="bottom-end" @command="auth.logout()">
+        <ElDropdown v-else trigger="click" placement="bottom-end" @command="accountCommand">
           <ElButton
             class="utility-button utility-button--account"
             :aria-label="`${auth.displayName} · 账号菜单`"
@@ -212,6 +220,9 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
                 <strong>{{ auth.displayName }}</strong>
                 <span>{{ auth.user?.account }}</span>
               </li>
+              <ElDropdownItem v-if="auth.user?.role === 0" command="merchant" divided
+                >商家工作台</ElDropdownItem
+              >
               <ElDropdownItem command="logout" divided>退出登录</ElDropdownItem>
             </ElDropdownMenu>
           </template>
