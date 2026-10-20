@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ElButton } from 'element-plus'
+import { ElAlert, ElButton } from 'element-plus'
 import { RefreshRight } from '@element-plus/icons-vue'
 import { orderStatuses } from '@/constants/orderStatus'
 import { useOrders } from '@/composables/useOrders'
@@ -7,7 +7,8 @@ import OrderPageShell from '@/components/storefront/OrderPageShell.vue'
 import OrderCard from '@/components/storefront/OrderCard.vue'
 import OrderPageState from '@/components/storefront/OrderPageState.vue'
 
-const { data, state, status, changeStatus, retry, listQuery } = useOrders()
+const { data, state, status, changeStatus, retry, listQuery, reconcile, refreshing, refreshError } =
+  useOrders()
 </script>
 
 <template>
@@ -15,7 +16,7 @@ const { data, state, status, changeStatus, retry, listQuery } = useOrders()
     <template #heading-action
       ><ElButton
         :icon="RefreshRight"
-        :loading="state === 'loading'"
+        :loading="refreshing"
         :disabled="state === 'login-required'"
         round
         @click="retry"
@@ -42,7 +43,8 @@ const { data, state, status, changeStatus, retry, listQuery } = useOrders()
         {{ tab.label }}
       </button>
     </nav>
-    <section class="order-list" aria-label="订单列表" :aria-busy="state === 'loading'">
+    <ElAlert v-if="refreshError" :title="refreshError" type="warning" show-icon :closable="false" />
+    <section class="order-list" aria-label="订单列表" :aria-busy="refreshing">
       <p class="sr-only" role="status" aria-live="polite">
         {{ state === 'success' ? `共 ${data?.length} 笔订单` : '' }}
       </p>
@@ -53,12 +55,13 @@ const { data, state, status, changeStatus, retry, listQuery } = useOrders()
           :order="order"
           :list-query="listQuery"
           @confirmed="retry"
+          @changed="reconcile"
         />
       </template>
       <OrderPageState v-else :state="state" :filtered="!!status" @retry="retry" />
     </section>
     <p v-if="state === 'success'" class="order-service-note">
-      模拟支付不会实际扣款；取消订单暂未开放。
+      模拟支付不会实际扣款；待付款订单可取消，取消后需重新下单。
     </p>
   </OrderPageShell>
 </template>

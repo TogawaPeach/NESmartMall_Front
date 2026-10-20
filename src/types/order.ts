@@ -40,6 +40,12 @@ export interface CreateOrderResult {
   payableAmountFen: number
 }
 
+export interface CancelOrderResult {
+  orderNo: string
+  status: 'CANCELLED'
+  cancelledAt: string
+}
+
 export interface Order extends OrderSummary {
   paidAt: string | null
   shippedAt: string | null

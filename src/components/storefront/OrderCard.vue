@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import type { LocationQueryRaw } from 'vue-router'
-import type { OrderSummary } from '@/types/order'
+import type { CancelOrderResult, Order, OrderSummary } from '@/types/order'
 import { formatOrderTime, orderStatusInfo } from '@/constants/orderStatus'
 import { formatPriceFen } from '@/utils/price'
 import OrderItems from './OrderItems.vue'
 import OrderActions from './OrderActions.vue'
 
 defineProps<{ order: OrderSummary; listQuery: LocationQueryRaw }>()
-const emit = defineEmits<{ confirmed: [] }>()
+const emit = defineEmits<{ confirmed: []; changed: [result: CancelOrderResult | Order] }>()
 </script>
 
 <template>
@@ -40,6 +40,7 @@ const emit = defineEmits<{ confirmed: [] }>()
           :status="order.status"
           :order-no="order.orderNo"
           @confirmed="emit('confirmed')"
+          @changed="emit('changed', $event)"
         />
       </div>
     </footer>

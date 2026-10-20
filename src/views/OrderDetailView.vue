@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ElButton, ElIcon } from 'element-plus'
+import { ElAlert, ElButton, ElIcon } from 'element-plus'
 import { Check, Service, Tickets } from '@element-plus/icons-vue'
 import { useOrderDetail } from '@/composables/useOrders'
 import { formatOrderTime, orderStatusInfo } from '@/constants/orderStatus'
@@ -11,7 +11,15 @@ import OrderActions from '@/components/storefront/OrderActions.vue'
 import OrderPageState from '@/components/storefront/OrderPageState.vue'
 import { useCustomerServiceContext } from '@/composables/useCustomerServiceContext'
 
-const { data: order, state, retry, listLocation } = useOrderDetail()
+const {
+  data: order,
+  state,
+  retry,
+  listLocation,
+  reconcile,
+  refreshing,
+  refreshError,
+} = useOrderDetail()
 const { consultOrder } = useCustomerServiceContext()
 const steps = computed(() =>
   order.value
@@ -34,7 +42,9 @@ const steps = computed(() =>
     <template #heading-action
       ><RouterLink class="order-back-link" :to="listLocation">← 返回订单列表</RouterLink></template
     >
-    <div :aria-busy="state === 'loading'">
+    <ElAlert v-if="refreshError" :title="refreshError" type="warning" show-icon :closable="false" />
+    <ElButton v-if="refreshError" :loading="refreshing" @click="retry">刷新订单</ElButton>
+    <div :aria-busy="refreshing">
       <template v-if="state === 'success' && order">
         <section class="order-detail-status order-panel" aria-label="订单状态">
           <div class="order-status-heading">
@@ -55,6 +65,7 @@ const steps = computed(() =>
                 :status="order.status"
                 :order-no="order.orderNo"
                 @confirmed="retry"
+                @changed="reconcile"
               />
             </div>
           </div>
@@ -146,7 +157,7 @@ const steps = computed(() =>
             </dl>
           </div>
         </section>
-        <p class="order-service-note">模拟支付不会实际扣款；取消订单暂未开放。</p>
+        <p class="order-service-note">模拟支付不会实际扣款；待付款订单可取消，取消后需重新下单。</p>
       </template>
       <OrderPageState v-else :state="state" @retry="retry" />
     </div>

@@ -94,12 +94,14 @@ export function orderMockPlugin(
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const url = new URL(req.url || '/', 'http://localhost')
-        const detailMatch = /^\/api\/orders\/(JW[1-9]\d*)(\/pay)?$/.exec(url.pathname)
+        const detailMatch = /^\/api\/orders\/(JW[1-9]\d*)(\/pay|\/cancel)?$/.exec(url.pathname)
         const creating = req.method === 'POST' && url.pathname === '/api/orders'
         const paying = req.method === 'POST' && detailMatch?.[2] === '/pay'
+        const cancelling = req.method === 'POST' && detailMatch?.[2] === '/cancel'
         if (
           !creating &&
           !paying &&
+          !cancelling &&
           !(
             req.method === 'GET' &&
             (url.pathname === '/api/orders' || (detailMatch && !detailMatch[2]))
@@ -125,7 +127,7 @@ export function orderMockPlugin(
         if (!sessions.has(authorization))
           sessions.set(authorization, structuredClone(scenario === 'empty' ? [] : orders))
         const data = sessions.get(authorization)!
-        if ((creating || paying) && !options.transactions) return send(404, null)
+        if ((creating || paying || cancelling) && !options.transactions) return send(404, null)
         const currentSnapshot = (order: Order) => {
           if (!order.payExpireAt) return order // Existing fixtures intentionally cover legacy GET.
           const expired = Date.now() >= Date.parse(order.payExpireAt)
@@ -229,6 +231,20 @@ export function orderMockPlugin(
             }
           })
           return
+        }
+        if (cancelling) {
+          const order = data.find((order) => order.orderNo === detailMatch[1])
+          if (!order) return send(404, null)
+          if (order.status === 'PENDING_PAYMENT') {
+            order.status = 'CANCELLED'
+            order.cancelledAt = new Date().toISOString()
+          }
+          if (order.status !== 'CANCELLED') return send(409, null)
+          return send(200, {
+            orderNo: order.orderNo,
+            status: order.status,
+            cancelledAt: order.cancelledAt,
+          })
         }
         if (paying) {
           const order = data.find((order) => order.orderNo === detailMatch[1])

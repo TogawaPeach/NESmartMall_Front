@@ -126,6 +126,7 @@ async function mount({
   adapter,
   entry = false,
   receipt = false,
+  cancellation = false,
 } = {}) {
   if (authenticated) saveSession()
   const pinia = createPinia(),
@@ -152,15 +153,20 @@ async function mount({
   })
   await router.push(path)
   const module = await server.ssrLoadModule(
-    receipt
-      ? '/src/composables/useConfirmReceipt.ts'
-      : entry
-        ? '/src/composables/useOrderEntry.ts'
-        : '/src/composables/useOrders.ts',
+    cancellation
+      ? '/src/composables/useCancelOrder.ts'
+      : receipt
+        ? '/src/composables/useConfirmReceipt.ts'
+        : entry
+          ? '/src/composables/useOrderEntry.ts'
+          : '/src/composables/useOrders.ts',
   )
   const { useLoginPromptStore } = await server.ssrLoadModule('/src/stores/loginPrompt.ts')
   let resource
-  const selectedOrder = ref(summary(order({ status: 'PENDING_RECEIPT' })))
+  const selectedOrder = ref(
+    summary(order({ status: cancellation ? 'PENDING_PAYMENT' : 'PENDING_RECEIPT' })),
+  )
+  const blocked = ref(false)
   const renderer = createRenderer({
     createComment: () => ({}),
     insert: () => {},
@@ -171,13 +177,18 @@ async function mount({
   const app = renderer.createApp({
     setup() {
       if (receipt) assert.equal(typeof module.useConfirmReceipt, 'function')
-      resource = receipt
-        ? module.useConfirmReceipt(() => selectedOrder.value)
-        : entry
-          ? module.useOrderEntry()
-          : path.startsWith('/orders/')
-            ? module.useOrderDetail()
-            : module.useOrders()
+      resource = cancellation
+        ? module.useCancelOrder(
+            () => selectedOrder.value,
+            () => blocked.value,
+          )
+        : receipt
+          ? module.useConfirmReceipt(() => selectedOrder.value)
+          : entry
+            ? module.useOrderEntry()
+            : path.startsWith('/orders/')
+              ? module.useOrderDetail()
+              : module.useOrders()
       return () => null
     },
   })
@@ -186,7 +197,7 @@ async function mount({
   fixture = { app, auth, router, prompt: useLoginPromptStore(pinia) }
   app.mount({})
   await flush()
-  return { ...fixture, resource, selectedOrder }
+  return { ...fixture, resource, selectedOrder, blocked }
 }
 
 test('order queries use Bearer, full lists and order numbers without client identity', async () => {
@@ -796,5 +807,262 @@ for (const change of ['account', 'order', 'unmount']) {
     finish()
     assert.equal(await pending, false)
     assert.equal(resource.error.value, '')
+  })
+}
+
+const cancelledResult = {
+  orderNo: 'JW202610160001',
+  status: 'CANCELLED',
+  cancelledAt: '2026-10-20T02:40:00.000Z',
+}
+const cancelReply = (config, data = cancelledResult) =>
+  reply(config, { code: 200, message: 'OK', data })
+
+test('cancel sends an empty POST with Bearer and accepts the minimal cancellation result', async () => {
+  const { cancelOrder } = await api()
+  assert.equal(typeof cancelOrder, 'function')
+  http.defaults.adapter = async (config) => {
+    requests.push(config)
+    return cancelReply(config)
+  }
+  assert.deepEqual(await cancelOrder('JW202610160001'), cancelledResult)
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].method, 'post')
+  assert.equal(requests[0].url, '/api/orders/JW202610160001/cancel')
+  assert.equal(requests[0].data, undefined)
+  assert.equal(requests[0].headers.get('Authorization'), 'Bearer order-token')
+  assert.equal(requests[0].headers.has('user-info'), false)
+  await assert.rejects(cancelOrder('../orders'))
+  assert.equal(requests.length, 1)
+})
+
+test('cancel distinguishes explicit rejection from malformed or unknown results without retrying', async () => {
+  const { cancelOrder } = await api()
+  assert.equal(typeof cancelOrder, 'function')
+  for (const status of [400, 401, 403, 404, 409, 500]) {
+    for (const transport of ['http', 'business']) {
+      http.defaults.adapter = async (config) => {
+        const body = { code: status, message: '取消被拒绝', data: null }
+        if (transport === 'business') return reply(config, body)
+        throw new AxiosError('failure', undefined, config, {}, reply(config, body, status))
+      }
+      await assert.rejects(
+        cancelOrder('JW202610160001'),
+        (error) =>
+          error.name === 'OrderCancelError' &&
+          error.status === status &&
+          error.message === '取消被拒绝',
+      )
+    }
+  }
+  for (const data of [
+    null,
+    {},
+    { ...cancelledResult, orderNo: 'JW2' },
+    { ...cancelledResult, status: 'PENDING_PAYMENT' },
+    { ...cancelledResult, cancelledAt: null },
+    { ...cancelledResult, cancelledAt: '2026-02-30T00:00:00Z' },
+  ]) {
+    http.defaults.adapter = async (config) => cancelReply(config, data)
+    await assert.rejects(cancelOrder('JW202610160001'), (error) => error.status === undefined)
+  }
+  http.defaults.adapter = async (config) => {
+    throw new AxiosError('offline', 'ERR_NETWORK', config)
+  }
+  await assert.rejects(cancelOrder('JW202610160001'), (error) => error.status === undefined)
+})
+
+test('cancel requires explicit confirmation, works without payment metadata and blocks duplicate submissions', async () => {
+  let finish
+  const { resource } = await mount({
+    cancellation: true,
+    adapter: (config) =>
+      new Promise((resolve) => {
+        finish = () => resolve(cancelReply(config))
+      }),
+  })
+  assert.equal(await resource.confirm(), null)
+  resource.open()
+  resource.close()
+  assert.equal(requests.length, 0)
+  resource.open()
+  const pending = resource.confirm()
+  await flush()
+  assert.equal(resource.submitting.value, true)
+  resource.close()
+  assert.equal(resource.visible.value, true)
+  assert.equal(await resource.confirm(), null)
+  assert.equal(requests.length, 1)
+  finish()
+  assert.deepEqual(await pending, cancelledResult)
+  assert.equal(resource.visible.value, false)
+  assert.equal(resource.blocking.value, true)
+  resource.open()
+  assert.equal(resource.visible.value, false)
+})
+
+test('cancel unknown result queries once and reconciles committed cancellation without another POST', async () => {
+  const { resource } = await mount({
+    cancellation: true,
+    adapter: (config) => {
+      if (config.method === 'post') throw new AxiosError('timeout', 'ECONNABORTED', config)
+      return reply(config, ok(order(cancelledResult)))
+    },
+  })
+  resource.open()
+  const result = await resource.confirm()
+  assert.equal(result.status, 'CANCELLED')
+  assert.deepEqual(
+    requests.map((r) => r.method),
+    ['post', 'get'],
+  )
+  assert.equal(resource.blocking.value, true)
+})
+
+test('cancel retains unknown state when lookup fails, and permits retry only after unpaid lookup', async () => {
+  let offline = true
+  const { resource } = await mount({
+    cancellation: true,
+    adapter: (config) => {
+      if (offline) throw new AxiosError('offline', 'ERR_NETWORK', config)
+      return reply(config, ok(order()))
+    },
+  })
+  resource.open()
+  assert.equal(await resource.confirm(), null)
+  assert.equal(resource.uncertain.value, true)
+  assert.equal(resource.blocking.value, true)
+  assert.equal(requests.length, 2)
+  assert.equal(await resource.confirm(), null)
+  resource.close()
+  resource.open()
+  assert.equal(resource.uncertain.value, true)
+  offline = false
+  assert.equal(await resource.refresh(), null)
+  assert.equal(resource.uncertain.value, false)
+  assert.equal(resource.blocking.value, false)
+  assert.match(resource.error.value, /仍待付款/)
+  assert.deepEqual(
+    requests.map((r) => r.method),
+    ['post', 'get', 'get'],
+  )
+})
+
+test('cancel 409 queries current paid facts while explicit 500 keeps the order unchanged', async () => {
+  const paid = order({
+    status: 'PENDING_SHIPMENT',
+    paidAt: '2026-10-16T03:00:00Z',
+    paidAmountFen: 260000,
+  })
+  const { resource, selectedOrder } = await mount({
+    cancellation: true,
+    adapter: (config) =>
+      config.method === 'post'
+        ? reply(config, { code: 409, message: '订单已付款，无法取消', data: null })
+        : reply(config, ok(paid)),
+  })
+  resource.open()
+  assert.equal((await resource.confirm()).status, 'PENDING_SHIPMENT')
+  assert.equal(selectedOrder.value.status, 'PENDING_PAYMENT')
+  assert.deepEqual(
+    requests.map((r) => r.method),
+    ['post', 'get'],
+  )
+})
+
+test('cancel explicit 500 preserves the dialog and allows a deliberate retry', async () => {
+  const { resource, selectedOrder } = await mount({
+    cancellation: true,
+    adapter: (config) => reply(config, { code: 500, message: '库存回补失败', data: null }),
+  })
+  resource.open()
+  assert.equal(await resource.confirm(), null)
+  assert.equal(resource.visible.value, true)
+  assert.equal(resource.uncertain.value, false)
+  assert.equal(resource.blocking.value, false)
+  assert.equal(resource.error.value, '库存回补失败')
+  assert.equal(selectedOrder.value.status, 'PENDING_PAYMENT')
+  assert.equal(requests.length, 1)
+})
+
+test('cancel refuses anonymous users, other statuses and concurrent payment operations', async () => {
+  const { resource, auth, selectedOrder, blocked } = await mount({ cancellation: true })
+  blocked.value = true
+  resource.open()
+  assert.equal(resource.visible.value, false)
+  blocked.value = false
+  for (const status of ['PENDING_SHIPMENT', 'PENDING_RECEIPT', 'COMPLETED', 'CANCELLED']) {
+    selectedOrder.value = summary(order({ status }))
+    resource.open()
+    assert.equal(resource.visible.value, false)
+    assert.equal(await resource.confirm(), null)
+  }
+  selectedOrder.value = summary(order())
+  resource.open()
+  blocked.value = true
+  assert.equal(await resource.confirm(), null)
+  auth.logout()
+  assert.equal(resource.visible.value, false)
+  assert.equal(requests.length, 0)
+})
+
+for (const change of ['account', 'order', 'unmount']) {
+  test(`cancel aborts and ignores late success after ${change}`, async () => {
+    let finish
+    const { resource, auth, selectedOrder, app } = await mount({
+      cancellation: true,
+      adapter: (config) =>
+        new Promise((resolve) => {
+          finish = () => resolve(cancelReply(config))
+        }),
+    })
+    resource.open()
+    const pending = resource.confirm()
+    await flush()
+    const signal = requests[0].signal
+    if (change === 'account') {
+      saveSession('other-token')
+      auth.getAuthorization()
+    }
+    if (change === 'order') selectedOrder.value = summary(order({ orderNo: 'JW2' }))
+    if (change === 'unmount') {
+      app.unmount()
+      fixture = undefined
+      auth.logout()
+      auth.$dispose()
+    }
+    assert.equal(signal.aborted, true)
+    finish()
+    assert.equal(await pending, null)
+    assert.equal(resource.visible.value, false)
+    assert.equal(resource.error.value, '')
+  })
+}
+
+for (const path of ['/orders', '/orders?status=PENDING_PAYMENT', '/orders/JW202610160001']) {
+  test(`confirmed cancellation survives refresh failure and preserves location at ${path}`, async () => {
+    let failed = false
+    const { resource, router } = await mount({
+      path,
+      adapter: (config) => {
+        if (failed) throw new AxiosError('offline', 'ERR_NETWORK', config)
+        return reply(config, ok(config.url === '/api/orders' ? [summary(order())] : order()))
+      },
+    })
+    failed = true
+    await resource.reconcile(cancelledResult)
+    assert.equal(router.currentRoute.value.fullPath, path)
+    assert.match(resource.refreshError.value, /刷新失败/)
+    if (path.includes('status=')) {
+      assert.deepEqual(resource.data.value, [])
+      assert.equal(resource.state.value, 'empty')
+    } else {
+      const value = Array.isArray(resource.data.value)
+        ? resource.data.value[0]
+        : resource.data.value
+      assert.equal(value.status, 'CANCELLED')
+      assert.equal(value.canPay, false)
+      if (path.includes('/JW')) assert.equal(value.cancelledAt, cancelledResult.cancelledAt)
+    }
   })
 }

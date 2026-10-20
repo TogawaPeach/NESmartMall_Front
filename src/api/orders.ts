@@ -2,6 +2,7 @@ import axios from 'axios'
 import { http, type SessionRequestOptions } from './http'
 import { isOrderStatus } from '@/constants/orderStatus'
 import type {
+  CancelOrderResult,
   CreateOrderInput,
   CreateOrderResult,
   Order,
@@ -322,6 +323,58 @@ export async function queryOrder(
   const result = readOrder(await request(`/api/orders/${orderNumber(orderNo)}`, true, options))
   if (result.orderNo !== orderNo) throw new OrderResponseError()
   return result
+}
+
+export const CANCEL_UNKNOWN_MESSAGE = '取消结果暂未确认，请刷新订单查看'
+
+export class OrderCancelError extends Error {
+  constructor(
+    message: string,
+    public readonly status?: number,
+  ) {
+    super(message)
+    this.name = 'OrderCancelError'
+  }
+}
+
+function cancelError(body: unknown, status: number): OrderCancelError {
+  const value = body && typeof body === 'object' ? (body as Record<string, unknown>) : null
+  const fallback: Record<number, string> = {
+    400: '订单号格式错误',
+    401: '登录已过期，请重新登录',
+    403: '无权取消此订单',
+    404: '订单不存在或取消服务暂未开放',
+    409: '当前订单状态不允许取消',
+    500: '取消订单失败，请稍后重试',
+  }
+  return new OrderCancelError(
+    typeof value?.message === 'string' && value.message.trim()
+      ? value.message.trim()
+      : (fallback[status] ?? '取消订单失败，请稍后重试'),
+    status,
+  )
+}
+
+export async function cancelOrder(
+  orderNo: string,
+  options: SessionRequestOptions = {},
+): Promise<CancelOrderResult> {
+  const path = `/api/orders/${orderNumber(orderNo)}/cancel`
+  try {
+    const response = await http.post<unknown>(path, undefined, options)
+    if (response.status !== 200) throw cancelError(response.data, response.status)
+    const body = record(response.data)
+    if (typeof body.code === 'number' && body.code >= 400) throw cancelError(body, body.code)
+    if (body.code !== 200 || body.message !== 'OK') throw new OrderResponseError()
+    const data = record(body.data)
+    if (data.orderNo !== orderNo || data.status !== 'CANCELLED') throw new OrderResponseError()
+    return { orderNo, status: 'CANCELLED', cancelledAt: time(data.cancelledAt) }
+  } catch (cause) {
+    if (axios.isCancel(cause) || cause instanceof OrderCancelError) throw cause
+    if (axios.isAxiosError(cause) && cause.response)
+      throw cancelError(cause.response.data, cause.response.status)
+    throw new OrderCancelError(CANCEL_UNKNOWN_MESSAGE)
+  }
 }
 
 export const CREATE_UNKNOWN_MESSAGE = '下单结果暂未确认，请刷新购物车并查看‘我的订单’。'

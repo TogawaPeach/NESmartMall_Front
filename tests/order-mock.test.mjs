@@ -186,3 +186,32 @@ test('order-only mock cannot create transactions from a real cart', async () => 
   })
   assert.equal(response.status, 404)
 })
+
+test('mock cancellation returns minimal facts, is idempotent and removes unpaid eligibility', async () => {
+  const request = await start('normal')
+  const created = (await (await request('/api/orders', true, post(intent))).json()).data
+  const path = `/api/orders/${created.orderNo}`
+  assert.equal((await request(`${path}/cancel`, false, { method: 'POST' })).status, 401)
+  const response = await request(`${path}/cancel`, true, { method: 'POST' })
+  assert.equal(response.status, 200)
+  const result = await response.json()
+  assert.equal(result.message, 'OK')
+  assert.deepEqual(Object.keys(result.data).sort(), ['cancelledAt', 'orderNo', 'status'])
+  assert.equal(result.data.orderNo, created.orderNo)
+  assert.equal(result.data.status, 'CANCELLED')
+  assert.ok(Number.isFinite(Date.parse(result.data.cancelledAt)))
+  const again = await (await request(`${path}/cancel`, true, { method: 'POST' })).json()
+  assert.deepEqual(again.data, result.data)
+  const detail = (await (await request(path)).json()).data
+  assert.equal(detail.status, 'CANCELLED')
+  assert.equal(detail.canPay, false)
+  assert.equal(detail.cancelledAt, result.data.cancelledAt)
+  const unpaid = (await (await request('/api/orders?status=PENDING_PAYMENT')).json()).data
+  assert.ok(unpaid.every((item) => item.orderNo !== created.orderNo))
+  assert.equal((await request(`${path}/pay`, true, { method: 'POST' })).status, 409)
+  assert.equal((await request('/api/orders/JW999/cancel', true, { method: 'POST' })).status, 404)
+  assert.equal(
+    (await request('/api/orders/JW202610140003/cancel', true, { method: 'POST' })).status,
+    409,
+  )
+})
