@@ -1,10 +1,10 @@
 import type { FlashSaleStatus, FlashSaleWindow } from '@/types/flashSale'
 
-/** Strict ISO 8601 instant; timezone-less database values are deliberately rejected. */
+/** Timezone-less activity timestamps are Beijing time, regardless of the device timezone. */
 export function parseFlashSaleTime(value: unknown): number | null {
   if (typeof value !== 'string') return null
   const match =
-    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})?$/.exec(
       value,
     )
   if (!match) return null
@@ -24,12 +24,12 @@ export function parseFlashSaleTime(value: unknown): number | null {
     Number(second) > 59
   )
     return null
-  if (offset !== 'Z') {
-    const h = Number(offset!.slice(1, 3))
-    const min = Number(offset!.slice(4, 6))
+  if (offset && offset !== 'Z') {
+    const h = Number(offset.slice(1, 3))
+    const min = Number(offset.slice(4, 6))
     if (h > 14 || min > 59 || (h === 14 && min !== 0)) return null
   }
-  const timestamp = Date.parse(value)
+  const timestamp = Date.parse(value.replace(' ', 'T') + (offset ? '' : '+08:00'))
   return Number.isFinite(timestamp) ? timestamp : null
 }
 

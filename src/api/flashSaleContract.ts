@@ -25,7 +25,7 @@ interface FlashSaleContract {
   }
   priceUnit: 'fen'
   time: {
-    format: 'iso8601-with-offset'
+    format: 'beijing-local-or-iso8601-with-offset'
     displayTimeZone: string
     clock: 'device' | 'response-field'
     /** Required when clock=response-field; same timestamp format as activity times. */
@@ -59,8 +59,8 @@ export const flashSaleContract: FlashSaleContract = {
   },
   priceUnit: 'fen',
   time: {
-    // Require Z or an explicit ±HH:mm offset. Never parse a bare MySQL DATETIME locally.
-    format: 'iso8601-with-offset',
+    // Confirmed: bare timestamps represent Beijing time, never the device's local timezone.
+    format: 'beijing-local-or-iso8601-with-offset',
     displayTimeZone: 'Asia/Shanghai',
     // No server clock field has been confirmed. Device time is for display only.
     clock: 'device',
