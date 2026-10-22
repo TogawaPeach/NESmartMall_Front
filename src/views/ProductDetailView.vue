@@ -10,25 +10,35 @@ import { useBuyNow } from '@/composables/useBuyNow'
 import { useLoginPromptStore } from '@/stores/loginPrompt'
 import { formatPriceFen } from '@/utils/price'
 import { useCustomerServiceContext } from '@/composables/useCustomerServiceContext'
+import FlashSaleTiming from '@/components/storefront/FlashSaleTiming.vue'
+import { flashSaleDemoEnabled, getFlashSaleOrderAvailability } from '@/api/flashSaleContract'
 
 const keyword = ref('')
 const loginPrompt = useLoginPromptStore()
-const { product, state, retry } = useProductDetail()
+const { product, state, isFlashSale, saleWindow, clockOffsetMs, retry } = useProductDetail()
+// Ordinary transaction composables never receive a product from the sale route.
+const ordinaryProduct = computed(() => (isFlashSale.value ? null : product.value))
+const saleOrder = getFlashSaleOrderAvailability()
 const { consultProduct } = useCustomerServiceContext()
-const { adding, feedback, add: addToCart } = useAddToCart(product)
+const { adding, feedback, add: addToCart } = useAddToCart(ordinaryProduct)
 const {
   checkoutOpen,
   canPurchase,
   items: checkoutItems,
   hasAttempt,
   openCheckout,
-} = useBuyNow(product)
+} = useBuyNow(ordinaryProduct)
 const price = computed(() => {
   if (product.value?.priceFen === null || !product.value) return null
   return formatPriceFen(product.value.priceFen)
 })
 const stateCopy = computed(() => {
   switch (state.value) {
+    case 'unconfigured':
+      return {
+        title: '秒杀详情即将开放',
+        description: '秒杀详情服务接口尚未配置，请稍后再来查看。',
+      }
     case 'login-required':
       return { title: '请先登录账号', description: '登录后即可继续查看商品详情' }
     case 'unavailable':
@@ -39,7 +49,10 @@ const stateCopy = computed(() => {
     case 'forbidden':
       return { title: '暂时无法查看此商品', description: '当前账号没有访问该商品的权限' }
     default:
-      return { title: '商品详情加载失败', description: '请稍后重试' }
+      return {
+        title: isFlashSale.value ? '秒杀详情加载失败' : '商品详情加载失败',
+        description: '请稍后重试',
+      }
   }
 })
 </script>
@@ -53,8 +66,21 @@ const stateCopy = computed(() => {
       <nav class="breadcrumb" aria-label="当前位置">
         <RouterLink :to="{ name: 'home' }">首页</RouterLink>
         <span aria-hidden="true">/</span>
-        <span aria-current="page">商品详情</span>
+        <template v-if="isFlashSale">
+          <RouterLink :to="{ name: 'flash-sale' }">限时秒杀</RouterLink>
+          <span aria-hidden="true">/</span>
+        </template>
+        <span aria-current="page">{{ isFlashSale ? '秒杀详情' : '商品详情' }}</span>
       </nav>
+
+      <ElAlert
+        v-if="isFlashSale && flashSaleDemoEnabled"
+        class="demo-notice"
+        title="演示模式：当前为示例商品与活动时间，未连接真实秒杀服务，购买暂未开放。"
+        type="warning"
+        show-icon
+        :closable="false"
+      />
 
       <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {{
@@ -117,8 +143,19 @@ const stateCopy = computed(() => {
             <h1 id="product-title">{{ product.name }}</h1>
             <p v-if="product.model" class="product-model">型号：{{ product.model }}</p>
 
+            <FlashSaleTiming
+              v-if="isFlashSale && saleWindow"
+              :window="saleWindow"
+              :clock-offset-ms="clockOffsetMs"
+            />
+
             <div class="price-and-inventory">
-              <p v-if="price !== null" class="product-price" :aria-label="`人民币 ${price} 元`">
+              <p
+                v-if="price !== null"
+                class="product-price"
+                :aria-label="`${isFlashSale ? '秒杀价，' : ''}人民币 ${price} 元`"
+              >
+                <span v-if="isFlashSale" class="sale-price-label">秒杀价</span>
                 <span class="currency" aria-hidden="true">¥</span>
                 <span aria-hidden="true">{{ price }}</span>
               </p>
@@ -134,7 +171,15 @@ const stateCopy = computed(() => {
             </div>
 
             <div class="purchase-area">
-              <div class="purchase-actions">
+              <template v-if="isFlashSale">
+                <div class="purchase-actions">
+                  <ElButton class="buy-button" :disabled="!saleOrder.available">{{
+                    saleOrder.message
+                  }}</ElButton>
+                </div>
+                <p class="availability-note">秒杀购买正在准备中，请稍后再来。</p>
+              </template>
+              <div v-else class="purchase-actions">
                 <ElButton class="buy-button" :disabled="!canPurchase" @click="openCheckout"
                   >立即购买</ElButton
                 >
@@ -146,7 +191,9 @@ const stateCopy = computed(() => {
                   >加入购物车</ElButton
                 >
               </div>
-              <ElButton v-if="hasAttempt" text @click="openCheckout">查看本次下单状态</ElButton>
+              <ElButton v-if="!isFlashSale && hasAttempt" text @click="openCheckout"
+                >查看本次下单状态</ElButton
+              >
               <ElButton
                 class="product-support-button"
                 text
@@ -155,7 +202,7 @@ const stateCopy = computed(() => {
                 >咨询商品</ElButton
               >
               <ElAlert
-                v-if="feedback"
+                v-if="!isFlashSale && feedback"
                 class="cart-feedback"
                 :title="feedback.message"
                 :type="feedback.type"
@@ -214,13 +261,22 @@ const stateCopy = computed(() => {
           @click="loginPrompt.openLogin('登录后即可查看商品详情')"
           >立即登录</ElButton
         >
-        <ElButton v-else-if="state === 'error'" :icon="RefreshRight" @click="retry">重试</ElButton>
+        <ElButton
+          v-else-if="state === 'error' || state === 'unconfigured'"
+          :icon="RefreshRight"
+          @click="retry"
+          >重试</ElButton
+        >
+        <RouterLink v-else-if="isFlashSale" class="home-link" :to="{ name: 'flash-sale' }"
+          >返回秒杀专区</RouterLink
+        >
         <RouterLink v-else class="home-link" :to="{ name: 'home' }">返回首页</RouterLink>
       </section>
     </main>
 
     <footer class="storefront-footer">经纬智选 · 测绘工具商城</footer>
     <CheckoutReceipt
+      v-if="!isFlashSale"
       v-model="checkoutOpen"
       :items="checkoutItems"
       :total-fen="product?.priceFen ?? 0"
@@ -250,6 +306,15 @@ const stateCopy = computed(() => {
 .detail-main {
   margin: 32px 12px 0;
   outline: none;
+}
+.demo-notice {
+  margin-bottom: 24px;
+}
+.sale-price-label {
+  width: 100%;
+  color: var(--store-muted);
+  font-size: 13px;
+  font-weight: 400;
 }
 .breadcrumb {
   display: flex;

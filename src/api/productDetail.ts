@@ -62,6 +62,24 @@ function readCount(value: unknown, field: string): number {
   return value
 }
 
+/** Shared presentation adapter; callers remain responsible for choosing the correct API. */
+export function adaptProductDetail(data: Record<string, unknown>, id: string): ProductDetail {
+  if (readId(data.id) !== id) throw new ProductResponseError('商品详情与请求商品不一致')
+  const name = readText(data.name)
+  if (!name) throw new ProductResponseError('商品名称缺失')
+  if (!Array.isArray(data.detailImages)) throw new ProductResponseError('详情图片必须为数组')
+  return {
+    id,
+    name,
+    model: readText(data.model),
+    imageUrl: data.coverUrl === null ? null : readImageUrl(data.coverUrl),
+    priceFen: data.price === null ? null : readCount(data.price, '价格'),
+    sales: readCount(data.sales, '已售数量'),
+    stock: readCount(data.stock, '库存'),
+    detailImages: data.detailImages.map(readImageUrl),
+  }
+}
+
 /** Read content directly through the shared gateway client. */
 export async function queryProductDetail(
   productId: string,
@@ -72,20 +90,7 @@ export async function queryProductDetail(
   try {
     const response = await http.get<unknown>(endpoint, options)
     const data = readData(response.data)
-    if (readId(data.id) !== id) throw new ProductResponseError('商品详情与请求商品不一致')
-    const name = readText(data.name)
-    if (!name) throw new ProductResponseError('商品名称缺失')
-    if (!Array.isArray(data.detailImages)) throw new ProductResponseError('详情图片必须为数组')
-    return {
-      id,
-      name,
-      model: readText(data.model),
-      imageUrl: data.coverUrl === null ? null : readImageUrl(data.coverUrl),
-      priceFen: data.price === null ? null : readCount(data.price, '价格'),
-      sales: readCount(data.sales, '已售数量'),
-      stock: readCount(data.stock, '库存'),
-      detailImages: data.detailImages.map(readImageUrl),
-    }
+    return adaptProductDetail(data, id)
   } catch (error: unknown) {
     if (axios.isAxiosError(error) && error.response) {
       // HTTP failures take precedence over a potentially misleading business code.

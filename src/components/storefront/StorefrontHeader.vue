@@ -64,8 +64,6 @@ function search() {
   window.open(href, '_blank', 'noopener,noreferrer')
 }
 
-const promotionItems = [{ key: 'flash-sale', label: '限时秒杀' }]
-
 const utilityItems = [
   { route: 'orders', label: '我的订单', icon: Tickets },
   { route: 'cart', label: '购物车', icon: ShoppingCart },
@@ -109,23 +107,12 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
       </RouterLink>
 
       <div class="promotion-navigation" role="group" aria-label="商城活动">
-        <ElTooltip
-          v-for="item in promotionItems"
-          :key="item.key"
-          :content="`${item.label} · 暂未开放`"
-          :trigger="['hover', 'focus']"
-          placement="bottom"
-          :show-after="150"
+        <RouterLink
+          class="promotion-button promotion-button--sale promotion-link"
+          :to="{ name: 'flash-sale' }"
         >
-          <ElButton
-            class="promotion-button"
-            :class="{ 'promotion-button--sale': item.key === 'flash-sale' }"
-            :aria-label="`${item.label} · 暂未开放`"
-            aria-disabled="true"
-          >
-            {{ item.label }}
-          </ElButton>
-        </ElTooltip>
+          限时秒杀
+        </RouterLink>
       </div>
 
       <ElInput
@@ -358,6 +345,22 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   --el-button-active-text-color: var(--store-sale-text);
   --el-button-active-bg-color: var(--store-sale-hover);
   --el-button-active-border-color: var(--store-sale-border-hover);
+}
+
+.promotion-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--el-button-border-color);
+  color: var(--el-button-text-color);
+  background: var(--el-button-bg-color);
+  cursor: pointer;
+}
+
+.promotion-link:hover,
+.promotion-link.router-link-active {
+  border-color: var(--el-button-hover-border-color);
+  background: var(--el-button-hover-bg-color);
 }
 
 .utility-navigation {

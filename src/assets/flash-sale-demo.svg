@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640" fill="none">
+  <title>全站仪示意图，仅供前端演示</title>
+  <ellipse cx="320" cy="584" rx="174" ry="16" fill="#dfe5e8"/>
+  <path d="m289 406-89 174m120-174v174m31-174 89 174" stroke="#687b87" stroke-width="16" stroke-linecap="round"/>
+  <path d="M247 397h146l-21 35H268z" fill="#425965"/>
+  <rect x="239" y="356" width="162" height="46" rx="14" fill="#536b7a"/>
+  <path d="M238 172v-35c0-40 164-40 164 0v35" stroke="#425965" stroke-width="18"/>
+  <rect x="210" y="163" width="220" height="205" rx="30" fill="#e4c65c"/>
+  <path d="M210 295h220v43c0 18-12 30-30 30H240c-18 0-30-12-30-30z" fill="#d4b64a"/>
+  <rect x="190" y="195" width="260" height="86" rx="23" fill="#536b7a"/>
+  <circle cx="320" cy="238" r="76" fill="#425965"/>
+  <circle cx="320" cy="238" r="58" fill="#263a45"/>
+  <circle cx="320" cy="238" r="44" fill="#799cae"/>
+  <circle cx="320" cy="238" r="29" fill="#314e5f"/>
+  <ellipse cx="307" cy="223" rx="13" ry="9" fill="#c2d9df"/>
+  <rect x="264" y="323" width="76" height="29" rx="5" fill="#425965"/>
+  <rect x="271" y="329" width="62" height="16" rx="2" fill="#c8dad6"/>
+  <circle cx="362" cy="336" r="9" fill="#536b7a"/>
+  <text x="320" y="622" text-anchor="middle" fill="#879198" font-family="sans-serif" font-size="15" letter-spacing="4">DEMO / 仪器示意图</text>
+</svg>

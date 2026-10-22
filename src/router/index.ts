@@ -35,6 +35,17 @@ const router = createRouter({
       component: () => import('../views/ProductsView.vue'),
     },
     {
+      path: '/flash-sale',
+      name: 'flash-sale',
+      component: () => import('../views/FlashSaleView.vue'),
+    },
+    {
+      path: '/flash-sale/products/:id',
+      name: 'flash-sale-detail',
+      component: () => import('../views/ProductDetailView.vue'),
+      meta: { productSource: 'flash-sale' },
+    },
+    {
       path: '/products/:id',
       name: 'product-detail',
       component: () => import('../views/ProductDetailView.vue'),

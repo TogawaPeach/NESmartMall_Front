@@ -5,6 +5,7 @@ interface ImportMetaEnv {
   readonly VITE_PRODUCTS_ENDPOINT?: string
   readonly VITE_PRODUCT_PAGE_ENDPOINT?: string
   readonly VITE_ORDER_MOCK?: string
+  readonly VITE_FLASH_SALE_DEMO?: string
 }
 
 interface ImportMeta {
