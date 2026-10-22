@@ -19,6 +19,10 @@ export function useFlashSaleList() {
     controller = request
     products.value = []
     clockOffsetMs.value = 0
+    if (!auth.getAuthorization()) {
+      state.value = 'login-required'
+      return
+    }
     state.value = 'loading'
     try {
       const result = await queryFlashSaleList({ signal: request.signal })

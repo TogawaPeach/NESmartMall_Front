@@ -84,6 +84,11 @@ function openUtility(route: string) {
   }
 }
 
+function openFlashSale() {
+  if (!loginPrompt.requireLogin('登录后即可查看秒杀商品')) return
+  void router.push({ name: 'flash-sale' })
+}
+
 function accountCommand(command: string) {
   if (command === 'merchant' && auth.user?.role === 0) {
     void router.push({ name: 'merchant-products' })
@@ -107,12 +112,13 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
       </RouterLink>
 
       <div class="promotion-navigation" role="group" aria-label="商城活动">
-        <RouterLink
+        <ElButton
           class="promotion-button promotion-button--sale promotion-link"
-          :to="{ name: 'flash-sale' }"
+          :aria-haspopup="!auth.isAuthenticated ? 'dialog' : undefined"
+          @click="openFlashSale"
         >
           限时秒杀
-        </RouterLink>
+        </ElButton>
       </div>
 
       <ElInput

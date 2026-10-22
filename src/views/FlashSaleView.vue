@@ -52,10 +52,12 @@ const { products, state, clockOffsetMs, retry } = useFlashSaleList()
 
 <style scoped>
 .storefront {
-  max-width: 1584px;
+  --store-module-inset: 6px;
+  width: 100%;
+  max-width: 1440px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 32px 64px 24px;
+  padding: 26px 80px 24px;
 }
 .skip-link {
   position: fixed;
@@ -69,7 +71,7 @@ const { products, state, clockOffsetMs, retry } = useFlashSaleList()
   top: 12px;
 }
 main {
-  margin: 32px 12px 0;
+  margin: 32px var(--store-module-inset) 0;
   outline: none;
 }
 .breadcrumb {
@@ -98,7 +100,7 @@ h1 {
   border-radius: 20px;
 }
 .storefront-footer {
-  margin: 56px 12px 0;
+  margin: 56px var(--store-module-inset) 0;
   padding: 30px 0 12px;
   border-top: 1px solid var(--store-border);
   color: var(--store-text);
@@ -111,11 +113,8 @@ h1 {
   }
 }
 @media (max-width: 767px) {
-  .storefront {
-    padding: 16px 20px 24px;
-  }
   main {
-    margin: 24px 0 0;
+    margin-top: 24px;
   }
   .sale-heading {
     margin-block: 28px 24px;
@@ -124,8 +123,14 @@ h1 {
     font-size: 28px;
   }
   .storefront-footer {
-    margin: 40px 0 0;
+    margin-top: 40px;
     font-size: 15px;
+  }
+}
+@media (max-width: 599px) {
+  .storefront {
+    --store-module-inset: 2px;
+    padding: 10px 20px 20px;
   }
 }
 </style>
