@@ -168,10 +168,28 @@
   line-height: 1.7;
   background: var(--store-filter-background);
 }
+.merchant-action-feedback {
+  margin-bottom: 20px;
+}
 .demo-badge {
   flex-shrink: 0;
   color: var(--store-accent);
   font-weight: 600;
+}
+.merchant-stats-loading {
+  margin: -16px 0 24px;
+  color: var(--text-secondary, #76818a);
+  font-size: 14px;
+}
+.merchant-stats-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -16px 0 24px;
+}
+.merchant-stats-error .el-alert {
+  flex: 1;
+  min-width: 0;
 }
 .merchant-stats {
   display: grid;
@@ -257,28 +275,6 @@
   border-bottom-color: var(--store-accent);
   font-weight: 600;
 }
-.inventory-search {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 270px;
-  padding: 9px 12px;
-  border: 1px solid var(--store-border);
-  border-radius: 7px;
-  color: var(--store-muted);
-}
-.inventory-search input {
-  min-width: 0;
-  width: 100%;
-  border: 0;
-  outline-offset: 2px;
-  background: transparent;
-  color: var(--store-text);
-  font-size: 12px;
-}
-.inventory-search input::placeholder {
-  color: var(--store-placeholder);
-}
 .inventory-table-scroll {
   overflow-x: auto;
 }
@@ -328,6 +324,16 @@
   background: var(--store-filter-background);
   color: var(--store-state-icon);
   font-size: 25px;
+}
+.product-cover {
+  width: 52px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 7px;
+}
+.product-cover .product-placeholder {
+  width: 100%;
+  height: 100%;
 }
 .product-summary strong {
   display: block;
@@ -408,7 +414,11 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.product-actions button:hover,
+.product-actions button:disabled {
+  color: var(--store-placeholder);
+  cursor: not-allowed;
+}
+.product-actions button:not(:disabled):hover,
 .inventory-empty button:hover {
   text-decoration: underline;
 }
@@ -420,6 +430,11 @@
 .inventory-empty > .el-icon {
   font-size: 28px;
   color: var(--store-placeholder);
+}
+.inventory-empty .el-alert {
+  max-width: 480px;
+  margin: 0 auto 16px;
+  text-align: left;
 }
 .inventory-footer {
   display: flex;
@@ -544,10 +559,6 @@
   }
   .status-tabs button {
     font-size: 12px;
-  }
-  .inventory-search {
-    width: 100%;
-    margin-top: 14px;
   }
   .inventory-footer {
     padding: 16px 12px;

@@ -1,132 +1,133 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
 import { ElButton, ElDialog } from 'element-plus'
-import { productCategories } from '@/constants/productCategories'
-import type { MerchantProduct, MerchantProductDraft } from '@/types/merchant'
+import { merchantCategoryLabel } from '@/utils/merchantProduct'
+import { merchantProductDraft } from '@/utils/merchantProductForm'
+import type { MerchantProductForm, MerchantProductRow } from '@/types/merchant'
 
 const visible = defineModel<boolean>({ required: true })
-const props = defineProps<{ product: MerchantProduct | null; error: string }>()
-const emit = defineEmits<{ save: [draft: MerchantProductDraft, id?: string] }>()
-const categories = productCategories.filter((category) => category.key !== 'all')
-const draft = reactive<MerchantProductDraft>({
-  name: '',
-  model: '',
-  category: 'total-station',
-  priceYuan: '',
-  stock: '',
-  description: '',
-})
+const props = defineProps<{ product: MerchantProductRow | null; error: string; saving: boolean }>()
+const emit = defineEmits<{ save: [draft: MerchantProductForm] }>()
+const categories = Array.from({ length: 6 }, (_, id) => ({ id, label: merchantCategoryLabel(id) }))
+const draft = reactive<MerchantProductForm>(merchantProductDraft(null))
 
-watch(visible, (opened) => {
-  if (!opened) return
-  const product = props.product
-  Object.assign(
-    draft,
-    product
-      ? {
-          name: product.name,
-          model: product.model,
-          category: product.category,
-          priceYuan: (product.priceFen / 100).toFixed(2),
-          stock: String(product.stock),
-          description: product.description,
-        }
-      : {
-          name: '',
-          model: '',
-          category: 'total-station',
-          priceYuan: '',
-          stock: '',
-          description: '',
-        },
-  )
-})
+watch(
+  [visible, () => props.product],
+  ([opened]) => {
+    if (!opened) return
+    Object.assign(draft, merchantProductDraft(props.product))
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <ElDialog
     v-model="visible"
-    :title="product ? '编辑商品' : '新增商品'"
+    :title="product ? '修改商品' : '新增商品'"
     width="min(560px, calc(100vw - 32px))"
     align-center
     append-to-body
     destroy-on-close
     :close-on-click-modal="false"
+    :close-on-press-escape="!saving"
+    :show-close="!saving"
     class="merchant-editor-dialog"
   >
-    <p class="editor-hint">
-      {{
-        product
-          ? '修改商品资料，保存后立即更新本页。'
-          : '填写商品资料，新增商品默认处于未上架状态。'
-      }}
-    </p>
-    <form class="editor-form" novalidate @submit.prevent="emit('save', { ...draft }, product?.id)">
-      <label class="editor-field" for="merchant-name">
-        商品名称 <span aria-hidden="true">*</span>
-        <input
-          id="merchant-name"
-          v-model="draft.name"
-          maxlength="80"
-          required
-          placeholder="请输入商品名称"
-        />
-      </label>
-      <div class="editor-row">
-        <label class="editor-field" for="merchant-model">
-          商品型号
+    <p v-if="!product" class="editor-hint">新增商品默认下架，保存后可单独上架。</p>
+    <form class="editor-form" novalidate @submit.prevent="emit('save', { ...draft })">
+      <fieldset class="editor-fields" :disabled="saving">
+        <label class="editor-field" for="merchant-name">
+          商品名称 <span aria-hidden="true">*</span>
           <input
-            id="merchant-model"
-            v-model="draft.model"
+            id="merchant-name"
+            v-model="draft.name"
             maxlength="80"
-            placeholder="例如 TS-02"
-          />
-        </label>
-        <label class="editor-field" for="merchant-category">
-          商品分类 <span aria-hidden="true">*</span>
-          <select id="merchant-category" v-model="draft.category" required>
-            <option v-for="category in categories" :key="category.key" :value="category.key">
-              {{ category.label }}
-            </option>
-          </select>
-        </label>
-      </div>
-      <div class="editor-row">
-        <label class="editor-field" for="merchant-price">
-          售价（元）<span aria-hidden="true">*</span>
-          <input
-            id="merchant-price"
-            v-model="draft.priceYuan"
-            inputmode="decimal"
             required
-            placeholder="例如 199.00"
+            placeholder="请输入商品名称"
           />
         </label>
-        <label class="editor-field" for="merchant-stock">
-          库存（件）<span aria-hidden="true">*</span>
+        <div class="editor-row">
+          <label class="editor-field" for="merchant-model">
+            商品型号
+            <input
+              id="merchant-model"
+              v-model="draft.model"
+              maxlength="80"
+              placeholder="例如 TS-02"
+            />
+          </label>
+          <label class="editor-field" for="merchant-category">
+            商品分类 <span aria-hidden="true">*</span>
+            <select id="merchant-category" v-model="draft.categoryId" required>
+              <option v-for="category in categories" :key="category.id" :value="category.id">
+                {{ category.label }}
+              </option>
+            </select>
+          </label>
+        </div>
+        <div class="editor-row">
+          <label class="editor-field" for="merchant-price">
+            售价（元）<span aria-hidden="true">*</span>
+            <input
+              id="merchant-price"
+              v-model="draft.priceYuan"
+              inputmode="decimal"
+              required
+              placeholder="例如 199.00"
+            />
+          </label>
+          <label class="editor-field" for="merchant-stock">
+            库存（件）<span aria-hidden="true">*</span>
+            <input
+              id="merchant-stock"
+              v-model="draft.stock"
+              inputmode="numeric"
+              required
+              placeholder="请输入库存数量"
+            />
+          </label>
+        </div>
+        <label class="editor-field" for="merchant-cover">
+          商品头图地址
           <input
-            id="merchant-stock"
-            v-model="draft.stock"
-            inputmode="numeric"
-            required
-            placeholder="请输入库存数量"
+            id="merchant-cover"
+            v-model="draft.coverUrl"
+            type="url"
+            placeholder="https://example.com/product.jpg（选填）"
           />
         </label>
-      </div>
-      <label class="editor-field" for="merchant-description">
-        商品说明
-        <textarea
-          id="merchant-description"
-          v-model="draft.description"
-          rows="3"
-          maxlength="500"
-          placeholder="简单介绍商品特点（选填）"
-        />
-      </label>
+        <label class="editor-toggle" for="merchant-seckill">
+          <input id="merchant-seckill" v-model="draft.isSeckill" type="checkbox" />
+          是否为秒杀商品
+        </label>
+        <div v-if="draft.isSeckill" class="editor-row">
+          <label class="editor-field" for="merchant-seckill-start">
+            秒杀开始时间（北京时间）<span aria-hidden="true">*</span>
+            <input
+              id="merchant-seckill-start"
+              v-model="draft.seckillStartTime"
+              type="datetime-local"
+              step="0.001"
+              required
+            />
+          </label>
+          <label class="editor-field" for="merchant-seckill-end">
+            秒杀结束时间（北京时间）<span aria-hidden="true">*</span>
+            <input
+              id="merchant-seckill-end"
+              v-model="draft.seckillEndTime"
+              type="datetime-local"
+              step="0.001"
+              required
+            />
+          </label>
+        </div>
+      </fieldset>
       <p v-if="error" class="editor-error" role="alert">{{ error }}</p>
       <div class="editor-actions">
-        <ElButton native-type="button" @click="visible = false">取消</ElButton>
-        <ElButton type="primary" native-type="submit">{{
+        <ElButton native-type="button" :disabled="saving" @click="visible = false">取消</ElButton>
+        <ElButton type="primary" native-type="submit" :loading="saving" :disabled="saving">{{
           product ? '保存修改' : '保存商品'
         }}</ElButton>
       </div>
@@ -143,6 +144,24 @@ watch(visible, (opened) => {
 .editor-form {
   display: grid;
   gap: 20px;
+}
+.editor-fields {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.editor-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--store-text);
+  font-size: 13px;
+}
+.editor-toggle input {
+  accent-color: var(--store-accent);
 }
 .editor-field {
   display: block;

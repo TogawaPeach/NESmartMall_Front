@@ -1,73 +1,53 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
-import { ElButton, ElIcon, ElMessage } from 'element-plus'
-import { Box, Plus, Search, Right, SwitchButton, EditPen, Goods } from '@element-plus/icons-vue'
+import { ElAlert, ElButton, ElIcon, ElImage, ElPagination } from 'element-plus'
+import { Box, Plus, Right, SwitchButton, EditPen, Goods } from '@element-plus/icons-vue'
 import jingweiLogo from '@/assets/jingwei-logo.svg'
 import { useAuthStore } from '@/stores/auth'
-import { productCategoryLabel } from '@/constants/productCategories'
-import { useMerchantProducts } from '@/composables/useMerchantProducts'
+import { useMerchantProductPage } from '@/composables/useMerchantProductPage'
+import { useMerchantStats } from '@/composables/useMerchantStats'
+import { useMerchantProductActions } from '@/composables/useMerchantProductActions'
 import MerchantProductEditor from '@/components/merchant/MerchantProductEditor.vue'
-import type { MerchantProduct, MerchantProductDraft, MerchantProductStatus } from '@/types/merchant'
+import { merchantProductDisplay } from '@/utils/merchantProduct'
+import { formatPriceFen } from '@/utils/price'
+import type { MerchantProductFilter } from '@/types/merchant'
 
 const auth = useAuthStore()
-const { products, keyword, status, filteredProducts, onSaleCount, saveProduct, toggleStatus } =
-  useMerchantProducts()
-const editorVisible = ref(false)
-const editingProduct = ref<MerchantProduct | null>(null)
-const editorError = ref('')
-const page = ref(1)
-const pageSize = 8
-const pageCount = computed(() => Math.max(1, Math.ceil(filteredProducts.value.length / pageSize)))
-const pageProducts = computed(() =>
-  filteredProducts.value.slice((page.value - 1) * pageSize, page.value * pageSize),
-)
-const tabs: { label: string; value: 'all' | MerchantProductStatus }[] = [
+const {
+  products,
+  total,
+  state,
+  errorMessage,
+  pageNum,
+  pageSize,
+  status,
+  now,
+  selectStatus,
+  changePage,
+  resetFilters,
+  retry,
+} = useMerchantProductPage()
+const { stats, state: statsState, errorMessage: statsError, retry: retryStats } = useMerchantStats()
+const {
+  editorVisible,
+  editingProduct,
+  editorError,
+  saving,
+  pendingStatusId,
+  busy: actionsBusy,
+  errorMessage: actionError,
+  successMessage: actionSuccess,
+  openEditor,
+  save,
+  changeStatus,
+} = useMerchantProductActions(async (created) => {
+  await Promise.all([created ? resetFilters() : retry(), retryStats()])
+})
+const tabs: { label: string; value: MerchantProductFilter }[] = [
   { label: '全部商品', value: 'all' },
   { label: '在售中', value: 'on-sale' },
   { label: '已下架', value: 'off-shelf' },
 ]
-const price = (fen: number) =>
-  (fen / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-watch([keyword, status], () => {
-  page.value = 1
-})
-watch(pageCount, (count) => {
-  page.value = Math.min(page.value, count)
-})
-
-function openEditor(product: MerchantProduct | null = null) {
-  editingProduct.value = product
-  editorError.value = ''
-  editorVisible.value = true
-}
-function save(draft: MerchantProductDraft, id?: string) {
-  const error = saveProduct(draft, id)
-  if (error) {
-    editorError.value = error
-    return
-  }
-  editorVisible.value = false
-  if (!id) {
-    keyword.value = ''
-    status.value = 'all'
-    page.value = 1
-  }
-  ElMessage.success(id ? '商品资料已更新（本地演示）' : '商品已保存，可点击上架（本地演示）')
-}
-function changeStatus(product: MerchantProduct) {
-  const error = toggleStatus(product.id)
-  if (error) {
-    ElMessage.warning(error)
-    return
-  }
-  ElMessage.success(`商品已${product.status === 'on-sale' ? '上架' : '下架'}（本地演示）`)
-}
-
-function resetFilters() {
-  keyword.value = ''
-  status.value = 'all'
-}
 </script>
 
 <template>
@@ -87,9 +67,7 @@ function resetFilters() {
           <ElIcon><Goods /></ElIcon>商品管理
         </RouterLink>
       </nav>
-      <div class="sidebar-footer">
-        <span class="shop-dot" />{{ auth.displayName }}<small>专注好商品，做好每一次服务</small>
-      </div>
+      <div class="sidebar-footer"><span class="shop-dot" />{{ auth.displayName }}</div>
     </aside>
 
     <div class="merchant-workspace">
@@ -109,35 +87,64 @@ function resetFilters() {
           <div>
             <p class="page-eyebrow">PRODUCTS</p>
             <h1>商品管理</h1>
-            <p class="page-description">管理你的店铺商品，随时调整上架状态。</p>
           </div>
-          <ElButton type="primary" :icon="Plus" size="large" @click="openEditor()"
+          <ElButton
+            type="primary"
+            :icon="Plus"
+            size="large"
+            :disabled="actionsBusy"
+            @click="openEditor()"
             >新增商品</ElButton
           >
         </div>
 
-        <div class="demo-notice" role="note">
-          <span class="demo-badge">演示模式</span
-          >当前为示例商品，仅在本页演示操作，离开页面或刷新后重置。
-        </div>
+        <ElAlert
+          v-if="actionSuccess"
+          class="merchant-action-feedback"
+          :title="actionSuccess"
+          type="success"
+          :closable="false"
+          show-icon
+        />
+        <ElAlert
+          v-if="actionError"
+          class="merchant-action-feedback"
+          :title="actionError"
+          type="error"
+          :closable="false"
+          show-icon
+        />
 
-        <section class="merchant-stats" aria-label="商品概况">
+        <section
+          class="merchant-stats"
+          aria-label="商品概况"
+          :aria-busy="statsState === 'loading'"
+          aria-live="polite"
+        >
           <div class="stat-card">
-            <span>全部商品</span><strong>{{ products.length }}<small>件</small></strong
+            <span>全部商品</span><strong>{{ stats?.allCount ?? '—' }}<small>件</small></strong
             ><ElIcon><Box /></ElIcon>
           </div>
           <div class="stat-card">
-            <span>在售商品</span><strong>{{ onSaleCount }}<small>件</small></strong
+            <span>在售商品</span><strong>{{ stats?.onSaleCount ?? '—' }}<small>件</small></strong
             ><span class="stat-dot is-selling" />
           </div>
           <div class="stat-card">
             <span>已下架商品</span
-            ><strong>{{ products.length - onSaleCount }}<small>件</small></strong
+            ><strong>{{ stats?.offShelfCount ?? '—' }}<small>件</small></strong
             ><span class="stat-dot" />
           </div>
         </section>
 
-        <section class="inventory-panel" aria-label="商品列表">
+        <p v-if="statsState === 'loading'" class="merchant-stats-loading" role="status">
+          商品统计加载中…
+        </p>
+        <div v-else-if="statsState !== 'success'" class="merchant-stats-error">
+          <ElAlert :title="statsError" type="error" :closable="false" show-icon />
+          <ElButton v-if="statsState === 'error'" @click="retryStats">重新加载统计</ElButton>
+        </div>
+
+        <section class="inventory-panel" aria-label="商品列表" :aria-busy="state === 'loading'">
           <div class="inventory-toolbar">
             <div class="status-tabs" role="group" aria-label="按上架状态筛选">
               <button
@@ -145,19 +152,10 @@ function resetFilters() {
                 :key="tab.value"
                 :class="{ selected: status === tab.value }"
                 :aria-pressed="status === tab.value"
-                @click="status = tab.value"
+                @click="selectStatus(tab.value)"
               >
                 {{ tab.label }}
               </button>
-            </div>
-            <div class="inventory-search">
-              <ElIcon aria-hidden="true"><Search /></ElIcon
-              ><input
-                v-model="keyword"
-                placeholder="搜索商品名称、型号或编号"
-                aria-label="搜索商品名称、型号或编号"
-                type="search"
-              />
             </div>
           </div>
           <div
@@ -178,10 +176,27 @@ function resetFilters() {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="product in pageProducts" :key="product.id">
+                <tr v-for="product in products" :key="product.id">
                   <td>
                     <div class="product-summary">
-                      <span class="product-placeholder" aria-hidden="true"
+                      <ElImage
+                        v-if="product.imageUrl"
+                        :key="`${product.id}:${product.imageUrl}`"
+                        :src="product.imageUrl"
+                        :alt="product.name"
+                        fit="contain"
+                        class="product-cover"
+                      >
+                        <template #placeholder
+                          ><span class="product-placeholder" aria-hidden="true"
+                            ><ElIcon><Box /></ElIcon></span
+                        ></template>
+                        <template #error
+                          ><span class="product-placeholder" aria-hidden="true"
+                            ><ElIcon><Box /></ElIcon></span
+                        ></template>
+                      </ElImage>
+                      <span v-else class="product-placeholder" aria-hidden="true"
                         ><ElIcon><Box /></ElIcon
                       ></span>
                       <div>
@@ -192,9 +207,15 @@ function resetFilters() {
                     </div>
                   </td>
                   <td>
-                    <span class="category-label">{{ productCategoryLabel(product.category) }}</span>
+                    <span class="category-label">{{ product.categoryLabel }}</span>
                   </td>
-                  <td class="product-price">¥ {{ price(product.priceFen) }}</td>
+                  <td class="product-price">
+                    {{
+                      product.priceFen === null
+                        ? '价格待确认'
+                        : `¥ ${formatPriceFen(product.priceFen)}`
+                    }}
+                  </td>
                   <td>
                     <span :class="{ 'stock-empty': product.stock === 0 }">{{ product.stock }}</span
                     ><small v-if="product.stock === 0" class="stock-note">待补货</small>
@@ -202,26 +223,47 @@ function resetFilters() {
                   <td>
                     <span
                       class="product-status"
-                      :class="{ 'is-selling': product.status === 'on-sale' }"
-                      ><i />{{ product.status === 'on-sale' ? '在售中' : '已下架' }}</span
+                      :class="{ 'is-selling': merchantProductDisplay(product, now).selling }"
+                      ><i />{{ merchantProductDisplay(product, now).label }}</span
                     >
                   </td>
                   <td>
                     <div class="product-actions">
-                      <button :aria-label="`编辑${product.name}`" @click="openEditor(product)">
+                      <button
+                        :aria-label="`编辑${product.name}`"
+                        :disabled="actionsBusy"
+                        @click="openEditor(product)"
+                      >
                         <ElIcon><EditPen /></ElIcon>编辑</button
                       ><button
-                        :aria-label="`${product.status === 'on-sale' ? '下架' : '上架'}${product.name}`"
+                        :aria-label="`${product.status === 1 ? '下架' : '上架'}${product.name}`"
+                        :disabled="actionsBusy"
+                        :aria-busy="pendingStatusId === product.id"
                         @click="changeStatus(product)"
                       >
-                        {{ product.status === 'on-sale' ? '下架' : '上架' }}
+                        {{
+                          pendingStatusId === product.id
+                            ? '处理中…'
+                            : product.status === 1
+                              ? '下架'
+                              : '上架'
+                        }}
                       </button>
                     </div>
                   </td>
                 </tr>
-                <tr v-if="!pageProducts.length">
+                <tr v-if="state === 'loading'">
+                  <td colspan="6" class="inventory-empty"><p role="status">商品列表加载中…</p></td>
+                </tr>
+                <tr v-else-if="!['success', 'empty'].includes(state)">
                   <td colspan="6" class="inventory-empty">
-                    <ElIcon><Search /></ElIcon>
+                    <ElAlert :title="errorMessage" type="error" :closable="false" show-icon />
+                    <button v-if="state === 'error'" @click="retry">重新加载商品</button>
+                  </td>
+                </tr>
+                <tr v-else-if="state === 'empty'">
+                  <td colspan="6" class="inventory-empty">
+                    <ElIcon><Box /></ElIcon>
                     <p>没有找到符合条件的商品</p>
                     <button @click="resetFilters">清除筛选</button>
                   </td>
@@ -230,14 +272,15 @@ function resetFilters() {
             </table>
           </div>
           <footer class="inventory-footer">
-            <span aria-live="polite">共 {{ filteredProducts.length }} 件商品</span>
-            <div>
-              <ElButton size="small" :disabled="page === 1" @click="page--">上一页</ElButton
-              ><span class="page-indicator">{{ page }} / {{ pageCount }}</span
-              ><ElButton size="small" :disabled="page === pageCount" @click="page++"
-                >下一页</ElButton
-              >
-            </div>
+            <span aria-live="polite">共 {{ total ?? '—' }} 件商品</span>
+            <ElPagination
+              v-if="total !== null && total > 0"
+              :current-page="pageNum"
+              :page-size="pageSize"
+              :total="total"
+              layout="prev, pager, next"
+              @current-change="changePage"
+            />
           </footer>
         </section>
         <p class="merchant-footnote">经纬智选 · 商家工作台</p>
@@ -247,6 +290,7 @@ function resetFilters() {
       v-model="editorVisible"
       :product="editingProduct"
       :error="editorError"
+      :saving="saving"
       @save="save"
     />
   </div>
