@@ -1,6 +1,10 @@
 import axios from 'axios'
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
-import { saveMerchantProduct, setMerchantProductStatus } from '@/api/merchantProductActions'
+import {
+  queryMerchantProductImages,
+  saveMerchantProduct,
+  setMerchantProductStatus,
+} from '@/api/merchantProductActions'
 import { useAuthStore } from '@/stores/auth'
 import { buildMerchantProductInput } from '@/utils/merchantProductForm'
 import type { MerchantProductForm, MerchantProductRow } from '@/types/merchant'
@@ -12,7 +16,15 @@ export function useMerchantProductActions(refresh: (created: boolean) => Promise
   const editingProduct = shallowRef<MerchantProductRow | null>(null)
   const saving = ref(false)
   const pendingStatusId = ref<string | null>(null)
-  const busy = computed(() => saving.value || pendingStatusId.value !== null)
+  const loadingEditor = ref(false)
+  const offShelfProduct = shallowRef<MerchantProductRow | null>(null)
+  const busy = computed(() => loadingEditor.value || saving.value || pendingStatusId.value !== null)
+  const offShelfVisible = computed({
+    get: () => offShelfProduct.value !== null,
+    set: (visible) => {
+      if (!visible) cancelOffShelf()
+    },
+  })
   const editorError = ref(''),
     errorMessage = ref(''),
     successMessage = ref('')
@@ -27,16 +39,59 @@ export function useMerchantProductActions(refresh: (created: boolean) => Promise
     editingProduct.value = null
     saving.value = false
     pendingStatusId.value = null
+    loadingEditor.value = false
+    offShelfProduct.value = null
     editorError.value = ''
     errorMessage.value = ''
     successMessage.value = ''
   }
-  function openEditor(product: MerchantProductRow | null = null) {
-    if (disposed || busy.value) return
-    editingProduct.value = product ? { ...product } : null
+  async function openEditor(product: MerchantProductRow | null = null) {
+    if (disposed || busy.value || offShelfProduct.value) return
+    const identitySequence = sequence
+    const authorization = auth.getAuthorization()
+    if (identitySequence !== sequence) return
+    if (!authorization || auth.user?.role !== 0) {
+      errorMessage.value = '请先登录商家账号'
+      return
+    }
     editorError.value = ''
     errorMessage.value = ''
     successMessage.value = ''
+    if (product && product.status !== 1 && product.detailImages === undefined) {
+      const request = ++sequence
+      const current = new AbortController()
+      controller = current
+      loadingEditor.value = true
+      const isCurrent = () => {
+        const latest = auth.getAuthorization()
+        return (
+          !disposed &&
+          request === sequence &&
+          !current.signal.aborted &&
+          latest === authorization &&
+          auth.user?.role === 0
+        )
+      }
+      try {
+        const detailImages = await queryMerchantProductImages(product.id, {
+          signal: current.signal,
+          expectedAuthorization: authorization,
+        })
+        if (!isCurrent()) return
+        editingProduct.value = { ...product, detailImages }
+        editorVisible.value = true
+      } catch (error) {
+        if (isCurrent() && !axios.isCancel(error))
+          errorMessage.value =
+            error instanceof Error ? error.message : '商品详情图读取失败，请稍后重试'
+      } finally {
+        if (isCurrent()) loadingEditor.value = false
+      }
+      return
+    }
+    editingProduct.value = product
+      ? { ...product, detailImages: product.status === 1 ? undefined : [...product.detailImages!] }
+      : null
     editorVisible.value = true
   }
 
@@ -79,7 +134,6 @@ export function useMerchantProductActions(refresh: (created: boolean) => Promise
       if (!isCurrent()) return false
       if (kind === 'save') {
         editorVisible.value = false
-        editingProduct.value = null
       }
       successMessage.value = message
       try {
@@ -102,10 +156,12 @@ export function useMerchantProductActions(refresh: (created: boolean) => Promise
   }
 
   async function save(draft: MerchantProductForm): Promise<boolean> {
-    if (disposed || busy.value || !editorVisible.value) return false
+    if (disposed || busy.value || !editorVisible.value || offShelfProduct.value) return false
     try {
       const id = editingProduct.value?.id
-      const input = buildMerchantProductInput(draft, id)
+      const input = buildMerchantProductInput(draft, id, {
+        preserveDetailImages: editingProduct.value?.status === 1,
+      })
       return await run(
         (options) => saveMerchantProduct(input, options),
         'save',
@@ -118,20 +174,50 @@ export function useMerchantProductActions(refresh: (created: boolean) => Promise
     }
   }
   async function changeStatus(product: MerchantProductRow): Promise<boolean> {
-    if (disposed || busy.value) return false
-    const next = product.status === 1 ? 2 : 1
-    if (next === 1 && (product.stock < 1 || product.priceFen === null || product.priceFen <= 0)) {
+    if (disposed || busy.value || offShelfProduct.value) return false
+    if (product.status === 1) {
+      const identitySequence = sequence
+      const authorization = auth.getAuthorization()
+      if (identitySequence !== sequence) return false
+      if (!authorization || auth.user?.role !== 0) {
+        errorMessage.value = '请先登录商家账号'
+        return false
+      }
+      errorMessage.value = ''
+      successMessage.value = ''
+      offShelfProduct.value = { ...product }
+      return false
+    }
+    if (product.stock < 1 || product.priceFen === null || product.priceFen <= 0) {
       successMessage.value = ''
       errorMessage.value = '请先补充库存并设置有效售价，再上架商品'
       return false
     }
     return run(
-      (options) => setMerchantProductStatus(product.id, next, options),
+      (options) => setMerchantProductStatus(product.id, 1, options),
       'status',
-      next === 1 ? '商品已上架' : '商品已下架',
+      '商品已上架',
       false,
       product.id,
     )
+  }
+  function cancelOffShelf() {
+    if (busy.value) return
+    offShelfProduct.value = null
+    errorMessage.value = ''
+  }
+  async function confirmOffShelf(): Promise<boolean> {
+    const product = offShelfProduct.value
+    if (!product || busy.value || disposed) return false
+    const success = await run(
+      (options) => setMerchantProductStatus(product.id, 2, options),
+      'status',
+      '商品已下架',
+      false,
+      product.id,
+    )
+    if (success && offShelfProduct.value?.id === product.id) offShelfProduct.value = null
+    return success
   }
   watch(() => [auth.accessToken, auth.user?.id, auth.user?.role], clear, { flush: 'sync' })
   onScopeDispose(() => {
@@ -144,6 +230,11 @@ export function useMerchantProductActions(refresh: (created: boolean) => Promise
     editorError,
     saving,
     pendingStatusId,
+    loadingEditor,
+    offShelfProduct,
+    offShelfVisible,
+    cancelOffShelf,
+    confirmOffShelf,
     busy,
     errorMessage,
     successMessage,

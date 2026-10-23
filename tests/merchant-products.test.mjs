@@ -166,6 +166,31 @@ test('page requests omit keyword even if an obsolete caller supplies one', async
   assert.deepEqual(requests.at(-1).params, { pageNum: 1, pageSize: 8 })
 })
 
+test('list keeps known detail links distinct from images that were not returned', async () => {
+  await mount()
+  http.defaults.adapter = async (config) =>
+    reply(
+      config,
+      body({
+        list: [
+          item({ detailImages: ['https://example.test/a.jpg', 'https://example.test/b.jpg'] }),
+        ],
+      }),
+    )
+  assert.deepEqual((await queryMerchantProductPage({ pageNum: 1 })).list[0].detailImages, [
+    'https://example.test/a.jpg',
+    'https://example.test/b.jpg',
+  ])
+  http.defaults.adapter = async (config) =>
+    reply(config, body({ list: [item({ detailImages: [] })] }))
+  assert.deepEqual((await queryMerchantProductPage({ pageNum: 1 })).list[0].detailImages, [])
+  http.defaults.adapter = async (config) => reply(config, body())
+  assert.equal((await queryMerchantProductPage({ pageNum: 1 })).list[0].detailImages, undefined)
+  http.defaults.adapter = async (config) =>
+    reply(config, body({ list: [item({ detailImages: null })] }))
+  await assert.rejects(queryMerchantProductPage({ pageNum: 1 }))
+})
+
 test('category numbers, nullable prices and covers, and blank normal-product times have defined display values', async () => {
   await mount()
   const labels = ['未分类', '全站仪', 'GNSS / RTK', '水准仪', '测距仪', '配件', '未知分类']

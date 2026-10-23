@@ -28,6 +28,7 @@ const row = (overrides = {}) => ({
   name: '全站仪',
   model: 'TS-02',
   imageUrl: 'https://example.test/cover.webp',
+  detailImages: [],
   categoryId: 1,
   categoryLabel: '全站仪',
   priceFen: 1234567,
@@ -42,6 +43,7 @@ const form = (overrides = {}) => ({
   name: ' 全站仪 ',
   model: 'TS-02',
   coverUrl: 'https://example.test/cover.webp',
+  detailImages: [''],
   categoryId: 1,
   priceYuan: '12345.67',
   stock: '12',
@@ -147,6 +149,7 @@ test('new save payload omits id and system fields, uses integer fen and null nor
     name: '全站仪',
     model: 'TS-02',
     coverUrl: 'https://example.test/cover.webp',
+    detailImages: [],
     categoryId: 1,
     price: 1234567,
     stock: 12,
@@ -329,7 +332,9 @@ test('pending save blocks duplicate submission, editor replacement and status wr
 test('status success posts raw status, leaves row untouched and refreshes list/stats once', async () => {
   const { actions, requests, refreshes } = await mount()
   const product = row({ isSeckill: true })
-  assert.equal(await actions.changeStatus(product), true)
+  assert.equal(await actions.changeStatus(product), false)
+  assert.equal(requests.length, 0)
+  assert.equal(await actions.confirmOffShelf(), true)
   assert.deepEqual(JSON.parse(requests[0].data), { status: 2 })
   assert.equal(product.status, 1)
   assert.deepEqual(refreshes, [false])
@@ -412,7 +417,8 @@ test('unmount cancels status wait and late responses cannot refresh or show succ
         finish = () => resolve(reply(config, { code: 200, data: null }))
       }),
   })
-  const pending = actions.changeStatus(row())
+  await actions.changeStatus(row())
+  const pending = actions.confirmOffShelf()
   await flush()
   app.unmount()
   assert.equal(signal.aborted, true)
@@ -420,4 +426,141 @@ test('unmount cancels status wait and late responses cannot refresh or show succ
   assert.equal(await pending, false)
   assert.equal(refreshes.length, 0)
   assert.equal(actions.successMessage.value, '')
+})
+
+test('detail links default to one blank field and serialize only ordered nonempty HTTP links', async () => {
+  await mount()
+  assert.deepEqual(merchantProductDraft(null).detailImages, [''])
+  const product = row({
+    status: 2,
+    detailImages: ['https://example.test/a.jpg', 'https://example.test/b.jpg'],
+  })
+  const draft = merchantProductDraft(product)
+  assert.deepEqual(draft.detailImages, product.detailImages)
+  draft.detailImages.push('')
+  assert.equal(product.detailImages.length, 2)
+  assert.deepEqual(
+    buildMerchantProductInput(
+      form({
+        detailImages: [' ', ' https://example.test/b.jpg ', '', 'https://example.test/a.jpg'],
+      }),
+    ).detailImages,
+    ['https://example.test/b.jpg', 'https://example.test/a.jpg'],
+  )
+  assert.deepEqual(buildMerchantProductInput(form({ detailImages: ['', ' '] })).detailImages, [])
+  assert.throws(
+    () => buildMerchantProductInput(form({ detailImages: ['javascript:alert(1)'] })),
+    /详情图/,
+  )
+})
+
+test('missing detail images are fetched from the merchant endpoint before opening edit', async () => {
+  const { actions, requests } = await mount({
+    adapter: async (config) =>
+      reply(config, { code: 200, data: { detailImages: ['https://example.test/existing.jpg'] } }),
+  })
+  await actions.openEditor(row({ status: 2, detailImages: undefined }))
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].method, 'get')
+  assert.equal(requests[0].url, `/api/merchant/products/${row().id}`)
+  assert.equal(requests[0].headers.get('Authorization'), 'Bearer merchant-token')
+  assert.equal(actions.editorVisible.value, true)
+  assert.deepEqual(actions.editingProduct.value.detailImages, ['https://example.test/existing.jpg'])
+})
+
+test('unknown or failed image retrieval never opens an empty editor or permits save', async () => {
+  const { actions, requests } = await mount({
+    adapter: async (config) => reply(config, { code: 200, data: {} }),
+  })
+  await actions.openEditor(row({ status: 2, detailImages: undefined }))
+  assert.equal(actions.editorVisible.value, false)
+  assert.ok(actions.errorMessage.value)
+  assert.equal(await actions.save(form()), false)
+  assert.equal(requests.filter((config) => config.method === 'post').length, 0)
+})
+
+test('late image loading cannot open an editor after the merchant changes', async () => {
+  let finish, signal
+  const { actions, auth } = await mount({
+    adapter: (config) =>
+      new Promise((resolve) => {
+        signal = config.signal
+        finish = () => resolve(reply(config, { code: 200, data: { detailImages: [] } }))
+      }),
+  })
+  const opening = actions.openEditor(row({ status: 2, detailImages: undefined }))
+  await flush()
+  assert.equal(actions.loadingEditor.value, true)
+  auth.logout()
+  assert.equal(signal.aborted, true)
+  finish()
+  await opening
+  assert.equal(actions.editorVisible.value, false)
+})
+
+test('off-shelf requires confirmation and cancel sends no write or refresh', async () => {
+  const { actions, requests, refreshes } = await mount()
+  await actions.changeStatus(row())
+  assert.equal(actions.offShelfVisible.value, true)
+  assert.equal(actions.offShelfProduct.value.id, row().id)
+  assert.equal(requests.length, 0)
+  actions.cancelOffShelf()
+  assert.equal(actions.offShelfVisible.value, false)
+  assert.equal(await actions.confirmOffShelf(), false)
+  assert.equal(requests.length, 0)
+  assert.equal(refreshes.length, 0)
+})
+
+test('off-shelf confirmation prevents duplicates and failure retains the confirmation', async () => {
+  let finish
+  const { actions, requests } = await mount({
+    adapter: (config) =>
+      new Promise((resolve) => {
+        finish = () => resolve(reply(config, { code: 409, message: '下架失败', data: null }))
+      }),
+  })
+  await actions.changeStatus(row())
+  const pending = actions.confirmOffShelf()
+  await flush()
+  assert.equal(requests.length, 1)
+  assert.equal(await actions.confirmOffShelf(), false)
+  actions.cancelOffShelf()
+  assert.equal(actions.offShelfVisible.value, true)
+  finish()
+  assert.equal(await pending, false)
+  assert.equal(actions.offShelfVisible.value, true)
+  assert.equal(actions.errorMessage.value, '下架失败')
+})
+
+test('an unseen account change before confirmation cancels without submitting old product', async () => {
+  const { actions, requests } = await mount()
+  await actions.changeStatus(row())
+  storage.set(
+    'nesmartmall.auth',
+    JSON.stringify(session({ accessToken: 'new-token', user: { ...user, id: 'merchant-2' } })),
+  )
+  storage.set('nesmartmall.auth.revision', 'new-before-confirm')
+  assert.equal(await actions.confirmOffShelf(), false)
+  assert.equal(actions.offShelfVisible.value, false)
+  assert.equal(requests.length, 0)
+})
+
+test('on-sale editing never fetches or submits detail images, preserving existing pictures', async () => {
+  const { actions, requests } = await mount()
+  await actions.openEditor(row({ detailImages: undefined }))
+  assert.equal(requests.length, 0)
+  assert.equal(actions.editorVisible.value, true)
+  assert.equal(
+    await actions.save(form({ detailImages: ['https://example.test/should-not-submit.jpg'] })),
+    true,
+  )
+  assert.equal(requests.length, 1)
+  assert.equal(requests[0].method, 'post')
+  assert.equal('detailImages' in JSON.parse(requests[0].data), false)
+  // Keep the listed-product view until the dialog's closing transition finishes.
+  assert.equal(actions.editingProduct.value?.status, 1)
+  assert.deepEqual(
+    merchantProductDraft(row({ detailImages: ['https://example.test/hidden.jpg'] })).detailImages,
+    [''],
+  )
 })

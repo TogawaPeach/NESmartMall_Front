@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
-import { ElAlert, ElButton, ElIcon, ElImage, ElPagination } from 'element-plus'
+import { ElAlert, ElButton, ElDialog, ElIcon, ElImage, ElPagination } from 'element-plus'
 import { Box, Plus, Right, SwitchButton, EditPen, Goods } from '@element-plus/icons-vue'
 import jingweiLogo from '@/assets/jingwei-logo.svg'
 import { useAuthStore } from '@/stores/auth'
@@ -34,6 +34,11 @@ const {
   editorError,
   saving,
   pendingStatusId,
+  loadingEditor,
+  offShelfProduct,
+  offShelfVisible,
+  cancelOffShelf,
+  confirmOffShelf,
   busy: actionsBusy,
   errorMessage: actionError,
   successMessage: actionSuccess,
@@ -107,13 +112,14 @@ const tabs: { label: string; value: MerchantProductFilter }[] = [
           show-icon
         />
         <ElAlert
-          v-if="actionError"
+          v-if="actionError && !offShelfVisible"
           class="merchant-action-feedback"
           :title="actionError"
           type="error"
           :closable="false"
           show-icon
         />
+        <p v-if="loadingEditor" role="status">正在读取商品信息…</p>
 
         <section
           class="merchant-stats"
@@ -293,6 +299,29 @@ const tabs: { label: string; value: MerchantProductFilter }[] = [
       :saving="saving"
       @save="save"
     />
+    <ElDialog
+      v-model="offShelfVisible"
+      title="确认下架"
+      width="min(420px, calc(100vw - 32px))"
+      align-center
+      append-to-body
+      :close-on-click-modal="false"
+      :close-on-press-escape="!actionsBusy"
+      :show-close="!actionsBusy"
+    >
+      <p>是否确认下架“{{ offShelfProduct?.name }}”？</p>
+      <ElAlert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
+      <template #footer>
+        <ElButton :disabled="actionsBusy" @click="cancelOffShelf">取消</ElButton>
+        <ElButton
+          type="primary"
+          :loading="actionsBusy"
+          :disabled="actionsBusy"
+          @click="confirmOffShelf"
+          >确认下架</ElButton
+        >
+      </template>
+    </ElDialog>
   </div>
 </template>
 

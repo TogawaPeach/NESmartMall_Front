@@ -11,6 +11,11 @@ const emit = defineEmits<{ save: [draft: MerchantProductForm] }>()
 const categories = Array.from({ length: 6 }, (_, id) => ({ id, label: merchantCategoryLabel(id) }))
 const draft = reactive<MerchantProductForm>(merchantProductDraft(null))
 
+function removeDetailImage(index: number) {
+  if (draft.detailImages.length === 1) draft.detailImages[0] = ''
+  else draft.detailImages.splice(index, 1)
+}
+
 watch(
   [visible, () => props.product],
   ([opened]) => {
@@ -97,6 +102,44 @@ watch(
             placeholder="https://example.com/product.jpg（选填）"
           />
         </label>
+        <div
+          v-if="!product || product.status !== 1"
+          class="editor-detail-images"
+          role="group"
+          aria-label="详情图片链接"
+        >
+          <div class="editor-detail-heading">
+            <strong>详情图片链接（选填）</strong>
+            <ElButton
+              native-type="button"
+              size="small"
+              :disabled="saving"
+              @click="draft.detailImages.push('')"
+              >添加图片链接</ElButton
+            >
+          </div>
+          <div v-for="(_, index) in draft.detailImages" :key="index">
+            <label class="editor-field" :for="`merchant-detail-image-${index}`"
+              >详情图片链接 {{ index + 1 }}</label
+            >
+            <div class="editor-detail-row">
+              <input
+                :id="`merchant-detail-image-${index}`"
+                v-model="draft.detailImages[index]"
+                type="url"
+                placeholder="https://example.com/detail.jpg（选填）"
+              />
+              <ElButton
+                native-type="button"
+                :disabled="saving"
+                :aria-label="`移除详情图片链接 ${index + 1}`"
+                @click="removeDetailImage(index)"
+                >移除</ElButton
+              >
+            </div>
+          </div>
+        </div>
+        <p v-else class="editor-hint">详情图请先下架后查看和修改。</p>
         <label class="editor-toggle" for="merchant-seckill">
           <input id="merchant-seckill" v-model="draft.isSeckill" type="checkbox" />
           是否为秒杀商品
@@ -174,6 +217,7 @@ watch(
   color: #b34735;
 }
 .editor-field input,
+.editor-detail-row input,
 .editor-field select,
 .editor-field textarea {
   display: block;
@@ -191,6 +235,7 @@ watch(
   resize: vertical;
 }
 .editor-field input::placeholder,
+.editor-detail-row input::placeholder,
 .editor-field textarea::placeholder {
   color: var(--store-placeholder);
 }
@@ -198,6 +243,30 @@ watch(
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
+}
+.editor-detail-images {
+  display: grid;
+  gap: 14px;
+}
+.editor-detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.editor-detail-heading strong {
+  color: var(--store-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+.editor-detail-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+.editor-detail-row input {
+  min-width: 0;
 }
 .editor-actions {
   display: flex;

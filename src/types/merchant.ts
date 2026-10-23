@@ -19,6 +19,7 @@ export interface MerchantProductRow {
   name: string
   model: string
   imageUrl: string | null
+  detailImages?: string[]
   categoryId: number
   categoryLabel: string
   priceFen: number | null
@@ -45,6 +46,7 @@ export interface MerchantProductForm {
   name: string
   model: string
   coverUrl: string
+  detailImages: string[]
   categoryId: number
   priceYuan: string
   stock: string
@@ -58,6 +60,7 @@ export interface MerchantProductSaveInput {
   name: string
   model: string
   coverUrl: string | null
+  detailImages?: string[]
   categoryId: number
   price: number
   stock: number

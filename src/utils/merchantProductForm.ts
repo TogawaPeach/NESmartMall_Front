@@ -20,6 +20,8 @@ export function merchantProductDraft(product: MerchantProductRow | null): Mercha
     name: product?.name ?? '',
     model: product?.model ?? '',
     coverUrl: product?.imageUrl ?? '',
+    detailImages:
+      product?.status !== 1 && product?.detailImages?.length ? [...product.detailImages] : [''],
     categoryId: product?.categoryId ?? 1,
     priceYuan:
       price === null || price === undefined
@@ -39,9 +41,24 @@ function time(value: string): number | null {
   )
 }
 
+export function readMerchantDetailImages(value: unknown): string[] {
+  if (!Array.isArray(value)) throw new Error('商品详情图未正确返回，请重新加载后再修改')
+  return value.map((entry, index) => {
+    try {
+      if (typeof entry !== 'string' || !entry.trim()) throw new Error()
+      const url = new URL(entry.trim())
+      if (!/^https?:$/.test(url.protocol)) throw new Error()
+      return url.href
+    } catch {
+      throw new Error(`第 ${index + 1} 个详情图链接须为有效 HTTP 或 HTTPS 地址`)
+    }
+  })
+}
+
 export function buildMerchantProductInput(
   draft: MerchantProductForm,
   id?: string,
+  options: { preserveDetailImages?: boolean } = {},
 ): MerchantProductSaveInput {
   if (id !== undefined && !/^[1-9]\d*$/.test(id)) throw new Error('商品编号无效')
   const name = draft.name.trim(),
@@ -57,6 +74,9 @@ export function buildMerchantProductInput(
   if (price <= 0 || price > 9999999900) throw new Error('价格须大于 0 且不超过 99,999,999 元')
   if (!/^\d{1,6}$/.test(draft.stock.trim())) throw new Error('库存须为 0 至 999,999 的整数')
   const stock = Number(draft.stock.trim())
+  const detailImages = options.preserveDetailImages
+    ? undefined
+    : readMerchantDetailImages(draft.detailImages.map((link) => link.trim()).filter(Boolean))
   let coverUrl: string | null = draft.coverUrl.trim() || null
   if (coverUrl) {
     try {
@@ -82,6 +102,7 @@ export function buildMerchantProductInput(
     name,
     model,
     coverUrl,
+    ...(detailImages === undefined ? {} : { detailImages }),
     categoryId: draft.categoryId,
     price,
     stock,

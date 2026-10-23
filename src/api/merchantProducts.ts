@@ -2,6 +2,7 @@ import axios from 'axios'
 import { http, type SessionRequestOptions } from './http'
 import { merchantCategoryLabel } from '@/utils/merchantProduct'
 import { parseFlashSaleTime } from '@/utils/flashSaleTime'
+import { readMerchantDetailImages } from '@/utils/merchantProductForm'
 import type {
   MerchantProductPageQuery,
   MerchantProductPageResult,
@@ -61,6 +62,9 @@ function product(value: unknown): MerchantProductRow {
     name: data.name.trim(),
     model: typeof data.model === 'string' ? data.model.trim() : '',
     imageUrl: image(data.coverUrl),
+    ...(data.detailImages === undefined
+      ? {}
+      : { detailImages: readMerchantDetailImages(data.detailImages) }),
     categoryId,
     categoryLabel: merchantCategoryLabel(categoryId),
     priceFen: data.price === null || data.price === undefined ? null : count(data.price),

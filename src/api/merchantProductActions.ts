@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { http, type SessionRequestOptions } from './http'
 import type { MerchantProductSaveInput } from '@/types/merchant'
+import { readMerchantDetailImages } from '@/utils/merchantProductForm'
 
 export class MerchantMutationError extends Error {
   constructor(message: string) {
@@ -60,4 +61,38 @@ export function setMerchantProductStatus(
   if (!/^[1-9]\d*$/.test(id) || ![1, 2].includes(status))
     return Promise.reject(new MerchantMutationError('商品编号或状态无效'))
   return post(`/api/merchant/products/${id}/status`, { status }, options)
+}
+
+/** Missing list images mean unknown, so read the merchant resource before editing. */
+export async function queryMerchantProductImages(
+  id: string,
+  options: SessionRequestOptions = {},
+): Promise<string[]> {
+  if (!/^[1-9]\d*$/.test(id)) throw new MerchantMutationError('商品编号无效')
+  try {
+    const { data: body } = await http.get<unknown>(`/api/merchant/products/${id}`, options)
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      Array.isArray(body) ||
+      !('code' in body) ||
+      body.code !== 200
+    )
+      throw failure(body)
+    if (
+      !('data' in body) ||
+      !body.data ||
+      typeof body.data !== 'object' ||
+      Array.isArray(body.data)
+    )
+      throw new MerchantMutationError('商品详情图读取失败，请重新加载后再修改')
+    const data = body.data as Record<string, unknown>
+    if (data.id !== undefined && data.id !== id)
+      throw new MerchantMutationError('商品详情与请求编号不一致')
+    return readMerchantDetailImages(data.detailImages)
+  } catch (error) {
+    if (axios.isCancel(error)) throw error
+    if (axios.isAxiosError(error)) throw failure(error.response?.data, error.response?.status)
+    throw error
+  }
 }
