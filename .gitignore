@@ -37,4 +37,13 @@ __screenshots__/
 
 # Vite
 *.timestamp-*-*.mjs
-docs/requirements/购物车页面需求与前端开发交接.md
+
+# Local documentation, requirements and handoff notes
+/docs/
+/design-qa.md
+[Rr]equire/
+[Rr]equirements/
+NESmartMall_Require/
+*交接*.md
+*需求*.md
+*[Hh][Aa][Nn][Dd][Oo][Ff][Ff]*.md
