@@ -109,6 +109,13 @@ test('detail preserves BIGINT string ids without rounding', async () => {
   assert.equal(requests[0].url, '/api/products/9223372036854775807')
 })
 
+test('detail preserves the backend seckill flag and only literal true enables it', async () => {
+  for (const value of [true, false, undefined, 'false', 'true', 1]) {
+    useReply(() => ({ code: 200, data: product({ isSeckill: value }) }))
+    assert.equal((await query()).isSeckill, value === true)
+  }
+})
+
 test('malformed ids never reach the API', async () => {
   for (const id of ['', 'page', '../auth', '0', '-1', '1?x=2']) await assert.rejects(query(id))
   assert.equal(requests.length, 0)
@@ -206,8 +213,18 @@ async function mount({
     }
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/products/:id', name: 'product-detail', component: {} }],
+    routes: [
+      { path: '/', name: 'home', component: {} },
+      { path: '/products/:id', name: 'product-detail', component: {} },
+      {
+        path: '/flash-sale/products/:id',
+        name: 'flash-sale-detail',
+        component: {},
+        meta: { productSource: 'flash-sale' },
+      },
+    ],
   })
+  await router.push('/')
   await router.push(path)
   const renderer = createRenderer({
     createComment: () => ({}),
@@ -250,6 +267,126 @@ async function mount({
   await flush()
   return { ...fixture, detail, cart, buyNow, payment }
 }
+
+for (const id of ['123', '9223372036854775807']) {
+  test(`ordinary detail redirects seckill ${id} to its sale endpoint and replaces history`, async () => {
+    const { detail, router } = await mount({
+      path: `/products/${id}?from=search#product-detail`,
+      adapter: async (config) =>
+        response(config, {
+          code: 200,
+          data: product({
+            id,
+            isSeckill: true,
+            price: config.url.startsWith('/api/seckill/') ? 100 : 990000,
+            seckillStartTime: '2026-10-22T16:00:53.581',
+            seckillEndTime: '2026-10-30T16:04:01',
+          }),
+        }),
+    })
+    await flush()
+    assert.equal(
+      router.currentRoute.value.fullPath,
+      `/flash-sale/products/${id}?from=search#product-detail`,
+    )
+    assert.equal(detail.isFlashSale.value, true)
+    assert.equal(detail.state.value, 'success')
+    assert.equal(detail.product.value.id, id)
+    assert.equal(detail.product.value.priceFen, 100)
+    assert.equal(detail.saleWindow.value.startsAtMs, Date.UTC(2026, 9, 22, 8, 0, 53, 581))
+    assert.deepEqual(
+      requests.map((request) => request.url),
+      [`/api/products/${id}`, `/api/seckill/products/${id}`],
+    )
+    router.back()
+    await flush()
+    assert.equal(router.currentRoute.value.path, '/')
+  })
+}
+
+for (const isSeckill of [false, undefined]) {
+  test(`ordinary detail with isSeckill=${isSeckill} keeps the ordinary route`, async () => {
+    const { detail, router } = await mount({
+      adapter: async (config) => response(config, { code: 200, data: product({ isSeckill }) }),
+    })
+    assert.equal(router.currentRoute.value.name, 'product-detail')
+    assert.equal(detail.isFlashSale.value, false)
+    assert.equal(detail.state.value, 'success')
+    assert.deepEqual(
+      requests.map((request) => request.url),
+      ['/api/products/123'],
+    )
+  })
+}
+
+test('direct sale detail uses only the sale endpoint without redirecting again', async () => {
+  const { detail, router } = await mount({
+    path: '/flash-sale/products/123',
+    adapter: async (config) => response(config, { code: 200, data: product({ isSeckill: true }) }),
+  })
+  assert.equal(router.currentRoute.value.name, 'flash-sale-detail')
+  assert.equal(detail.state.value, 'success')
+  assert.deepEqual(
+    requests.map((request) => request.url),
+    ['/api/seckill/products/123'],
+  )
+})
+
+test('redirected sale waits for its own content and failures cannot expose ordinary checkout', async () => {
+  let finishSale
+  const { detail, router, buyNow } = await mount({
+    authenticated: true,
+    buyNowActions: true,
+    adapter: async (config) => {
+      if (config.url.startsWith('/api/seckill/')) {
+        return new Promise((resolve) => {
+          finishSale = (body) => resolve(response(config, body))
+        })
+      }
+      return response(config, { code: 200, data: product({ isSeckill: true }) })
+    },
+  })
+  await flush()
+  assert.equal(router.currentRoute.value.name, 'flash-sale-detail')
+  assert.equal(detail.state.value, 'loading')
+  assert.equal(detail.product.value, null)
+  assert.equal(buyNow.canPurchase.value, false)
+  finishSale({ code: 404 })
+  await flush()
+  assert.equal(detail.state.value, 'unavailable')
+  assert.equal(detail.product.value, null)
+  assert.equal(buyNow.canPurchase.value, false)
+  assert.deepEqual(
+    requests.map((request) => request.url),
+    ['/api/products/123', '/api/seckill/products/123'],
+  )
+})
+
+test('a late seckill response cannot redirect away from the newly selected ordinary product', async () => {
+  let release
+  const { detail, router } = await mount({
+    adapter: async (config) => {
+      if (config.url === '/api/products/123') {
+        return new Promise((resolve) => {
+          release = () =>
+            resolve(response(config, { code: 200, data: product({ isSeckill: true }) }))
+        })
+      }
+      return response(config, { code: 200, data: product({ id: '124', isSeckill: false }) })
+    },
+  })
+  await router.push('/products/124')
+  await flush()
+  release()
+  await flush()
+  assert.equal(router.currentRoute.value.path, '/products/124')
+  assert.equal(detail.product.value.id, '124')
+  assert.equal(detail.state.value, 'success')
+  assert.deepEqual(
+    requests.map((request) => request.url),
+    ['/api/products/123', '/api/products/124'],
+  )
+})
 
 test('buy now opens one-item checkout without cart writes and submits only that product', async () => {
   const { buyNow, payment } = await mount({ authenticated: true, buyNowActions: true })

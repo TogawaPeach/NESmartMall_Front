@@ -31,19 +31,17 @@ interface FlashSaleContract {
     /** Required when clock=response-field; same timestamp format as activity times. */
     serverTimePath: FieldPath | null
   }
-  /** Reserved only: no order request implementation until its full contract is reviewed. */
-  order: { confirmed: false; endpoint: null }
+  /** Body: { productId, recipient: { name, phone, address } }; one item, no quantity field. */
+  order: { endpoint: string; feedbackDelayMs: number }
 }
 
 /**
- * Pending integration mappings, NOT an existing backend contract.
- * Verified local backend on 2026-10-22: no seckill query/order controller exists.
- * Confirm paths, envelope, fields and time rules here before setting confirmed=true.
+ * Keep sale queries and purchases separate from ordinary product/checkout APIs.
  * Do not point either entry at the ordinary /api/products endpoints.
  */
 export const flashSaleContract: FlashSaleContract = {
-  list: { confirmed: false, endpoint: null, dataPath: ['data'] },
-  detail: { confirmed: false, endpoint: null, dataPath: ['data'] },
+  list: { confirmed: true, endpoint: '/api/seckill/products', dataPath: ['data'] },
+  detail: { confirmed: true, endpoint: '/api/seckill/products/{id}', dataPath: ['data'] },
   response: { codePath: ['code'], successCode: 200 },
   fields: {
     id: 'id',
@@ -66,15 +64,10 @@ export const flashSaleContract: FlashSaleContract = {
     clock: 'device',
     serverTimePath: null,
   },
-  order: { confirmed: false, endpoint: null },
+  order: { endpoint: '/api/orders/seckill', feedbackDelayMs: 1_000 },
 }
 
 export const flashSaleCarousel = { intervalMs: 4_000 } as const
 /** Explicit, development-only opt-in. Failed live requests NEVER enable this mode. */
 export const flashSaleDemoEnabled =
   import.meta.env.DEV && import.meta.env.VITE_FLASH_SALE_DEMO === 'true'
-
-/** Purchase entry is intentionally closed even in demo mode. */
-export function getFlashSaleOrderAvailability() {
-  return { available: false, message: '秒杀购买暂未开放' } as const
-}

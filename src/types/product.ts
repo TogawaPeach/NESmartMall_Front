@@ -23,6 +23,8 @@ export interface Product {
 
 export interface ProductDetail {
   id: string
+  /** Ordinary detail responses use this flag to select the flash-sale flow. */
+  isSeckill?: boolean
   name: string
   model: string | null
   imageUrl: string | null

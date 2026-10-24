@@ -90,7 +90,7 @@ export async function queryProductDetail(
   try {
     const response = await http.get<unknown>(endpoint, options)
     const data = readData(response.data)
-    return adaptProductDetail(data, id)
+    return { ...adaptProductDetail(data, id), isSeckill: data.isSeckill === true }
   } catch (error: unknown) {
     if (axios.isAxiosError(error) && error.response) {
       // HTTP failures take precedence over a potentially misleading business code.

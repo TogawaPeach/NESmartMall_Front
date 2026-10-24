@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ProductDetailError, queryProductDetail } from '@/api/productDetail'
 import { useAuthStore } from '@/stores/auth'
 import type { ProductDetail, ProductDetailLoadState } from '@/types/product'
@@ -9,6 +9,7 @@ import type { FlashSaleWindow } from '@/types/flashSale'
 
 export function useProductDetail() {
   const route = useRoute()
+  const router = useRouter()
   const auth = useAuthStore()
   const isFlashSale = computed(() => route.meta.productSource === 'flash-sale')
   const product = ref<ProductDetail | null>(null)
@@ -42,6 +43,16 @@ export function useProductDetail() {
       } else {
         const result = await queryProductDetail(id, { signal: requestController.signal })
         if (requestSequence !== sequence || requestController.signal.aborted) return
+        if (result.isSeckill) {
+          // Keep sale content out of ordinary checkout while the sale route loads its own data.
+          await router.replace({
+            name: 'flash-sale-detail',
+            params: { id },
+            query: route.query,
+            hash: route.hash,
+          })
+          return
+        }
         product.value = result
       }
       state.value = 'success'

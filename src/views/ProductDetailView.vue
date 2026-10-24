@@ -4,6 +4,7 @@ import { ElAlert, ElButton, ElIcon, ElImage, ElSkeleton, ElSkeletonItem } from '
 import { Box, Picture, RefreshRight, Service, User, Warning } from '@element-plus/icons-vue'
 import StorefrontHeader from '@/components/storefront/StorefrontHeader.vue'
 import CheckoutReceipt from '@/components/storefront/CheckoutReceipt.vue'
+import FlashSalePurchaseReceipt from '@/components/storefront/FlashSalePurchaseReceipt.vue'
 import { useProductDetail } from '@/composables/useProductDetail'
 import { useAddToCart } from '@/composables/useAddToCart'
 import { useBuyNow } from '@/composables/useBuyNow'
@@ -11,14 +12,29 @@ import { useLoginPromptStore } from '@/stores/loginPrompt'
 import { formatPriceFen } from '@/utils/price'
 import { useCustomerServiceContext } from '@/composables/useCustomerServiceContext'
 import FlashSaleTiming from '@/components/storefront/FlashSaleTiming.vue'
-import { flashSaleDemoEnabled, getFlashSaleOrderAvailability } from '@/api/flashSaleContract'
+import { flashSaleDemoEnabled } from '@/api/flashSaleContract'
+import { useFlashSalePurchase } from '@/composables/useFlashSalePurchase'
 
 const keyword = ref('')
 const loginPrompt = useLoginPromptStore()
 const { product, state, isFlashSale, saleWindow, clockOffsetMs, retry } = useProductDetail()
 // Ordinary transaction composables never receive a product from the sale route.
 const ordinaryProduct = computed(() => (isFlashSale.value ? null : product.value))
-const saleOrder = getFlashSaleOrderAvailability()
+const saleProduct = computed(() => (isFlashSale.value ? product.value : null))
+const {
+  visible: saleConfirmOpen,
+  submitting: saleSubmitting,
+  submitted: saleSubmitted,
+  uncertain: saleUncertain,
+  feedback: saleFeedback,
+  formError: saleFormError,
+  recipient: saleRecipient,
+  canPurchase: canPurchaseSale,
+  buttonText: saleButtonText,
+  open: openSalePurchase,
+  close: closeSalePurchase,
+  confirm: confirmSalePurchase,
+} = useFlashSalePurchase(saleProduct, saleWindow, clockOffsetMs)
 const { consultProduct } = useCustomerServiceContext()
 const { adding, feedback, add: addToCart } = useAddToCart(ordinaryProduct)
 const {
@@ -173,11 +189,26 @@ const stateCopy = computed(() => {
             <div class="purchase-area">
               <template v-if="isFlashSale">
                 <div class="purchase-actions">
-                  <ElButton class="buy-button" :disabled="!saleOrder.available">{{
-                    saleOrder.message
-                  }}</ElButton>
+                  <ElButton
+                    class="buy-button"
+                    :disabled="!canPurchaseSale"
+                    :loading="saleSubmitting"
+                    @click="openSalePurchase"
+                    >{{ saleButtonText }}</ElButton
+                  >
                 </div>
-                <p class="availability-note">秒杀购买正在准备中，请稍后再来。</p>
+                <ElAlert
+                  v-if="saleFeedback"
+                  class="cart-feedback"
+                  :title="saleFeedback"
+                  :type="saleSubmitted ? 'info' : 'warning'"
+                  :closable="false"
+                  show-icon
+                  role="status"
+                />
+                <RouterLink v-if="saleSubmitted || saleUncertain" :to="{ name: 'orders' }"
+                  >查看我的订单</RouterLink
+                >
               </template>
               <div v-else class="purchase-actions">
                 <ElButton class="buy-button" :disabled="!canPurchase" @click="openCheckout"
@@ -275,6 +306,17 @@ const stateCopy = computed(() => {
     </main>
 
     <footer class="storefront-footer">经纬智选 · 测绘工具商城</footer>
+    <FlashSalePurchaseReceipt
+      v-if="isFlashSale"
+      :visible="saleConfirmOpen"
+      :product="product"
+      v-model:recipient="saleRecipient"
+      :submitting="saleSubmitting"
+      :can-purchase="canPurchaseSale"
+      :error="saleFormError"
+      @close="closeSalePurchase"
+      @confirm="confirmSalePurchase"
+    />
     <CheckoutReceipt
       v-if="!isFlashSale"
       v-model="checkoutOpen"
