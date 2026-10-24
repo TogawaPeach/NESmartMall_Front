@@ -145,17 +145,6 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
         </template>
       </ElInput>
 
-      <ElTooltip
-        content="AI 导购 · 暂未开放"
-        :trigger="['hover', 'focus']"
-        placement="bottom"
-        :show-after="150"
-      >
-        <ElButton class="ai-guide-button" aria-label="AI 导购 · 暂未开放" aria-disabled="true">
-          AI 导购
-        </ElButton>
-      </ElTooltip>
-
       <div class="utility-navigation" role="group" aria-label="个人入口">
         <ElTooltip
           v-for="item in utilityItems"
@@ -311,7 +300,6 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
   cursor: pointer;
 }
 
-.ai-guide-button,
 .promotion-button {
   --el-button-text-color: var(--store-text);
   --el-button-bg-color: var(--store-surface);
@@ -444,7 +432,6 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
 }
 
 .storefront-brand:focus-visible,
-.ai-guide-button:focus-visible,
 .promotion-button:focus-visible,
 .utility-button:focus-visible,
 .search-submit:focus-visible {
@@ -465,12 +452,6 @@ function handleSearchEnter(event: KeyboardEvent | Event) {
     grid-column: 1;
     grid-row: 1;
     justify-self: start;
-  }
-
-  .ai-guide-button {
-    grid-column: 2;
-    grid-row: 1;
-    justify-self: end;
   }
 
   .promotion-navigation {

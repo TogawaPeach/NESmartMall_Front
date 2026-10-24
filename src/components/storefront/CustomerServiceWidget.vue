@@ -18,7 +18,7 @@ const composer = ref<HTMLTextAreaElement>()
 const trigger = ref<HTMLButtonElement>()
 let previousFocus: HTMLElement | null = null
 const triggerLabel = computed(() =>
-  unreadCount.value ? `联系客服，${unreadCount.value} 条未读消息` : '联系客服',
+  unreadCount.value ? `智能导购，${unreadCount.value} 条未读消息` : '智能导购',
 )
 const canSend = computed(
   () => !!draft.value.trim() && draft.value.trim().length <= CUSTOMER_SERVICE_TEXT_LIMIT,
@@ -77,7 +77,7 @@ onBeforeUnmount(() => support.clearConversation())
     :aria-expanded="visible"
     @click="support.open()"
   >
-    <ElIcon aria-hidden="true"><Service /></ElIcon><span>联系客服</span>
+    <ElIcon aria-hidden="true"><Service /></ElIcon><span>智能导购</span>
     <span v-if="unreadCount" class="support-unread" aria-hidden="true">{{
       unreadCount > 99 ? '99+' : unreadCount
     }}</span>
@@ -85,7 +85,7 @@ onBeforeUnmount(() => support.clearConversation())
   <ElDrawer
     v-model="visible"
     class="customer-service-drawer"
-    title="经纬智选客服"
+    title="智能导购"
     size="420px"
     append-to-body
     destroy-on-close
@@ -100,8 +100,8 @@ onBeforeUnmount(() => support.clearConversation())
           <ElIcon><Service /></ElIcon>
         </div>
         <div class="support-heading">
-          <h2 :id="titleId">经纬智选客服</h2>
-          <span>统一商家客服 · 模拟接待</span>
+          <h2 :id="titleId">智能导购</h2>
+          <span>商品选购咨询 · 模拟接待</span>
         </div>
         <div class="support-header-actions">
           <ElButton
@@ -115,8 +115,8 @@ onBeforeUnmount(() => support.clearConversation())
           <ElButton
             text
             :icon="Close"
-            aria-label="关闭客服"
-            title="关闭客服"
+            aria-label="关闭智能导购"
+            title="关闭智能导购"
             @click="support.close()"
           />
         </div>
@@ -129,7 +129,7 @@ onBeforeUnmount(() => support.clearConversation())
       role="log"
       aria-live="polite"
       aria-relevant="additions"
-      aria-label="客服聊天记录"
+      aria-label="智能导购聊天记录"
     >
       <li
         v-for="message in messages"
@@ -138,7 +138,7 @@ onBeforeUnmount(() => support.clearConversation())
         :class="`support-message--${message.sender}`"
       >
         <div class="support-message-meta">
-          <span>{{ message.sender === 'service' ? '客服 · 模拟' : '你' }}</span
+          <span>{{ message.sender === 'service' ? '智能导购 · 模拟' : '你' }}</span
           ><time :datetime="new Date(message.createdAt).toISOString()">{{
             timeFormatter.format(message.createdAt)
           }}</time>
@@ -149,7 +149,7 @@ onBeforeUnmount(() => support.clearConversation())
       </li>
     </ol>
     <p v-if="isReplying" class="support-typing" role="status">
-      <span aria-hidden="true">•••</span> 客服正在模拟回复
+      <span aria-hidden="true">•••</span> 智能导购正在模拟回复
     </p>
     <section class="support-shortcuts" aria-label="常见问题">
       <p>
