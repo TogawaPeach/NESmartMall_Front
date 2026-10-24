@@ -158,10 +158,13 @@ export function useMerchantProductActions(refresh: (created: boolean) => Promise
   async function save(draft: MerchantProductForm): Promise<boolean> {
     if (disposed || busy.value || !editorVisible.value || offShelfProduct.value) return false
     try {
-      const id = editingProduct.value?.id
-      const input = buildMerchantProductInput(draft, id, {
-        preserveDetailImages: editingProduct.value?.status === 1,
-      })
+      const product = editingProduct.value
+      const id = product?.id
+      const input = buildMerchantProductInput(
+        { ...draft, isSeckill: product?.isSeckill ?? draft.isSeckill },
+        id,
+        { preserveDetailImages: product?.status === 1 },
+      )
       return await run(
         (options) => saveMerchantProduct(input, options),
         'save',

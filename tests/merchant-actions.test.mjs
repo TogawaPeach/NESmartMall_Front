@@ -282,6 +282,53 @@ test('new/edit open correctly, successful save closes editor then refreshes curr
   assert.equal(JSON.parse(requests[1].data).price, 1099)
 })
 
+test('editing keeps the original product type even when the draft attempts to change it', async () => {
+  const { actions, requests } = await mount()
+  for (const status of [0, 1, 2]) {
+    for (const isSeckill of [false, true]) {
+      await actions.openEditor(row({ status, isSeckill }))
+      assert.equal(
+        await actions.save(
+          form({
+            isSeckill: !isSeckill,
+            seckillStartTime: '2026-10-25T18:00:00',
+            seckillEndTime: '2026-10-25T20:00:00',
+          }),
+        ),
+        true,
+      )
+      const body = JSON.parse(requests.at(-1).data)
+      assert.equal(body.isSeckill, isSeckill)
+      assert.equal(body.seckillStartTime, isSeckill ? '2026-10-25T18:00:00' : null)
+      assert.equal(body.seckillEndTime, isSeckill ? '2026-10-25T20:00:00' : null)
+    }
+  }
+  assert.equal(requests.length, 6)
+})
+
+test('new products can still be saved as either ordinary or seckill products', async () => {
+  const { actions, requests } = await mount()
+  for (const isSeckill of [false, true]) {
+    await actions.openEditor()
+    assert.equal(
+      await actions.save(
+        form({
+          isSeckill,
+          seckillStartTime: '2026-10-25T18:00:00',
+          seckillEndTime: '2026-10-25T20:00:00',
+        }),
+      ),
+      true,
+    )
+    const body = JSON.parse(requests.at(-1).data)
+    assert.equal('id' in body, false)
+    assert.equal(body.isSeckill, isSeckill)
+    assert.equal(body.seckillStartTime, isSeckill ? '2026-10-25T18:00:00' : null)
+    assert.equal(body.seckillEndTime, isSeckill ? '2026-10-25T20:00:00' : null)
+  }
+  assert.equal(requests.length, 2)
+})
+
 test('failed save keeps editor open and does not refresh or mutate rows', async () => {
   const { actions, refreshes } = await mount({
     adapter: async (config) => reply(config, { code: 500, message: '保存失败', data: null }),

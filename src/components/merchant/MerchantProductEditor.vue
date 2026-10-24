@@ -140,10 +140,13 @@ watch(
           </div>
         </div>
         <p v-else class="editor-hint">详情图请先下架后查看和修改。</p>
-        <label class="editor-toggle" for="merchant-seckill">
+        <label v-if="!product" class="editor-toggle" for="merchant-seckill">
           <input id="merchant-seckill" v-model="draft.isSeckill" type="checkbox" />
           是否为秒杀商品
         </label>
+        <p v-else class="editor-product-type">
+          商品类型：{{ product.isSeckill ? '秒杀商品' : '普通商品' }}（创建后不可更改）
+        </p>
         <div v-if="draft.isSeckill" class="editor-row">
           <label class="editor-field" for="merchant-seckill-start">
             秒杀开始时间（北京时间）<span aria-hidden="true">*</span>
@@ -187,6 +190,11 @@ watch(
 .editor-form {
   display: grid;
   gap: 20px;
+}
+.editor-product-type {
+  margin: 0;
+  color: var(--store-muted);
+  font-size: 13px;
 }
 .editor-fields {
   display: grid;
