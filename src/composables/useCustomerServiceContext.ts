@@ -6,7 +6,7 @@ import type { Order } from '@/types/order'
 export function useCustomerServiceContext() {
   const support = useCustomerServiceStore()
   function consultProduct(product: ProductDetail) {
-    support.open({
+    support.open('support', {
       kind: 'product',
       id: product.id,
       name: product.name,
@@ -15,7 +15,7 @@ export function useCustomerServiceContext() {
     })
   }
   function consultOrder(order: Order) {
-    support.open({
+    support.open('support', {
       kind: 'order',
       orderNo: order.orderNo,
       status: order.status,

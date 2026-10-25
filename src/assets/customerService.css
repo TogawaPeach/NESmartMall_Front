@@ -89,13 +89,6 @@
   font-weight: 600;
   line-height: 1.5;
 }
-.support-heading > span {
-  display: block;
-  margin-top: 3px;
-  color: var(--store-muted);
-  font-size: 11px;
-  line-height: 1.6;
-}
 .support-header-actions {
   display: flex;
   flex-shrink: 0;
@@ -108,19 +101,13 @@
   padding: 5px;
   color: var(--store-muted);
 }
-.support-demo-notice {
+.support-notice {
   margin: 0;
   padding: 10px 20px;
   background: var(--store-selected);
   color: var(--store-muted);
   font-size: 11px;
   line-height: 1.8;
-}
-.support-demo-notice > span {
-  margin-right: 8px;
-  color: var(--store-accent);
-  font-weight: 600;
-  white-space: nowrap;
 }
 .support-messages {
   flex: 1;
@@ -173,11 +160,6 @@
   border-color: transparent;
   border-radius: 14px 4px 14px 14px;
 }
-.support-local-state {
-  margin-top: 5px;
-  color: var(--store-placeholder);
-  font-size: 10px;
-}
 .support-typing {
   margin: 0;
   padding: 0 20px 10px;
@@ -189,40 +171,6 @@
   margin-right: 5px;
   color: var(--store-accent);
   letter-spacing: 2px;
-}
-.support-shortcuts {
-  flex-shrink: 0;
-  padding: 12px 20px 16px;
-  border-top: 1px solid var(--store-border);
-}
-.support-shortcuts p {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0 0 9px;
-  color: var(--store-muted);
-  font-size: 11px;
-}
-.support-shortcuts > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.support-shortcuts button {
-  flex: 1;
-  min-width: 70px;
-  padding: 7px 6px;
-  border: 1px solid var(--store-border);
-  border-radius: 8px;
-  color: var(--store-muted);
-  background: var(--store-surface);
-  font-size: 12px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.support-shortcuts button:hover {
-  background: var(--store-hover);
-  color: var(--store-text);
 }
 .support-composer {
   padding-top: 14px;
@@ -357,10 +305,31 @@
 .support-context-preview .support-context-card {
   max-width: 100%;
 }
-.support-context-preview > .el-button {
-  display: block;
-  margin: 10px 0 0 auto;
-  border-radius: 16px;
+.support-context-hint {
+  margin: 8px 0 0;
+  color: var(--store-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.support-entry-tabs {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  padding: 10px 20px;
+}
+.support-entry-tabs button {
+  flex: 1;
+  padding: 7px;
+  border: 1px solid var(--store-border);
+  border-radius: 8px;
+  background: var(--store-surface);
+  color: var(--store-muted);
+  cursor: pointer;
+}
+.support-entry-tabs button[aria-pressed='true'] {
+  color: var(--store-accent);
+  background: var(--store-selected);
+  border-color: var(--store-accent);
 }
 .product-support-button.el-button {
   margin: 18px 0 0;
@@ -397,16 +366,10 @@
     padding-right: 16px;
     padding-left: 16px;
   }
-  .support-demo-notice,
+  .support-notice,
   .support-messages {
     padding-right: 16px;
     padding-left: 16px;
-  }
-  .support-shortcuts {
-    padding: 12px 16px;
-  }
-  .support-shortcuts button {
-    min-width: 40%;
   }
   .support-heading h2 {
     font-size: 16px;
@@ -432,16 +395,9 @@
     padding-top: 10px;
     padding-bottom: 10px;
   }
-  .support-demo-notice {
+  .support-notice {
     padding-top: 6px;
     padding-bottom: 6px;
-  }
-  .support-shortcuts {
-    padding-top: 8px;
-    padding-bottom: 8px;
-  }
-  .support-shortcuts > p {
-    display: none;
   }
   .support-context-preview .support-context-card {
     padding: 8px;
@@ -469,7 +425,7 @@
   }
   .support-context-preview {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
     gap: 6px;
     padding: 8px 0;
@@ -478,9 +434,6 @@
     grid-column: 1 / -1;
     margin-bottom: 0;
   }
-  .support-context-preview > .el-button {
-    margin: 0;
-  }
   .support-context-preview .support-context-label {
     display: none;
   }
@@ -488,19 +441,5 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-}
-@media (max-height: 450px) {
-  .support-heading > span {
-    display: none;
-  }
-  .support-shortcuts > div {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 2px;
-  }
-  .support-shortcuts button {
-    flex: none;
-    min-width: 76px;
   }
 }

@@ -1,146 +1,233 @@
-import { computed, onScopeDispose, ref, watch } from 'vue'
+import { computed, onScopeDispose, reactive, ref, watch } from 'vue'
 import { defineStore } from 'pinia'
 import { useAuthStore } from './auth'
+import { useLoginPromptStore } from './loginPrompt'
+import { CustomerServiceError, streamCustomerServiceTurn } from '@/api/customerService'
 import {
   CUSTOMER_SERVICE_TEXT_LIMIT,
   customerServiceQuestions,
-  customerServiceReply,
   customerServiceWelcome,
 } from '@/constants/customerService'
-import type { CustomerServiceMessage, SupportContext } from '@/types/customerService'
+import type {
+  CustomerServiceEntry,
+  CustomerServiceMessage,
+  SupportContext,
+} from '@/types/customerService'
 
-/** Frontend demonstration only: no network, persistence, or real delivery receipts. */
+interface Conversation {
+  draft: string
+  error: string
+  unreadCount: number
+  pendingContext: SupportContext | null
+  messages: CustomerServiceMessage[]
+  isReplying: boolean
+}
+
 export const useCustomerServiceStore = defineStore('customerService', () => {
   const auth = useAuthStore()
+  const loginPrompt = useLoginPromptStore()
   const visible = ref(false)
-  const draft = ref('')
-  const error = ref('')
-  const unreadCount = ref(0)
-  const pendingContext = ref<SupportContext | null>(null)
-  const pendingReplies = ref(0)
-  const isReplying = computed(() => pendingReplies.value > 0)
-  const timers = new Set<ReturnType<typeof setTimeout>>()
+  const entry = ref<CustomerServiceEntry>('guide')
   let nextId = 0
   let generation = 0
-  const welcome = (): CustomerServiceMessage => ({
-    id: ++nextId,
-    sender: 'service',
-    createdAt: Date.now(),
-    kind: 'text',
-    text: customerServiceWelcome,
-  })
-  const messages = ref<CustomerServiceMessage[]>([welcome()])
-
-  function cancelReplies() {
-    ++generation
-    for (const timer of timers) clearTimeout(timer)
-    timers.clear()
-    pendingReplies.value = 0
-  }
-  function clearConversation() {
-    cancelReplies()
-    messages.value = [welcome()]
-    pendingContext.value = null
-    draft.value = ''
-    error.value = ''
-    unreadCount.value = 0
-  }
-  watch(
-    () => (auth.user ? `${auth.user.id}:${auth.user.role}` : 'guest'),
-    () => {
-      clearConversation()
-      visible.value = false
-    },
-    { flush: 'sync' },
-  )
-  function open(context?: SupportContext) {
-    const expectedGeneration = generation
-    auth.getAuthorization()
-    if (context && expectedGeneration === generation) pendingContext.value = { ...context }
-    visible.value = true
-    unreadCount.value = 0
-  }
-  function close() {
-    visible.value = false
-  }
-  function scheduleReply(text: string) {
-    const expectedGeneration = generation
-    pendingReplies.value++
-    const timer = setTimeout(() => {
-      timers.delete(timer)
-      // Storage events can lag: refresh identity before appending any delayed message.
-      auth.getAuthorization()
-      if (expectedGeneration !== generation) return
-      pendingReplies.value--
-      messages.value.push({
+  const controllers = new Map<CustomerServiceEntry, AbortController>()
+  const createConversation = (kind: CustomerServiceEntry): Conversation => ({
+    draft: '',
+    error: '',
+    unreadCount: 0,
+    pendingContext: null,
+    isReplying: false,
+    messages: [
+      {
         id: ++nextId,
         sender: 'service',
         createdAt: Date.now(),
         kind: 'text',
-        text,
+        text: customerServiceWelcome[kind],
+      },
+    ],
+  })
+  const conversations = reactive({
+    guide: createConversation('guide'),
+    support: createConversation('support'),
+  })
+  const current = computed(() => conversations[entry.value])
+  const draft = computed({
+    get: () => current.value.draft,
+    set: (value: string) => {
+      current.value.draft = value
+    },
+  })
+  const error = computed({
+    get: () => current.value.error,
+    set: (value: string) => {
+      current.value.error = value
+    },
+  })
+  const messages = computed(() => current.value.messages)
+  const pendingContext = computed(() => current.value.pendingContext)
+  const isReplying = computed(() => current.value.isReplying)
+  const unreadCount = computed(
+    () => conversations.guide.unreadCount + conversations.support.unreadCount,
+  )
+
+  function cancel(kind: CustomerServiceEntry) {
+    controllers.get(kind)?.abort()
+    controllers.delete(kind)
+    conversations[kind].isReplying = false
+  }
+  function clearConversation() {
+    cancel(entry.value)
+    conversations[entry.value] = createConversation(entry.value)
+  }
+  function clearAllConversations() {
+    ++generation
+    for (const kind of ['guide', 'support'] as const) {
+      cancel(kind)
+      conversations[kind] = createConversation(kind)
+    }
+  }
+  watch(
+    () => [auth.user?.id, auth.user?.role, auth.accessToken] as const,
+    (next, previous) => {
+      const identityChanged = next[0] !== previous[0] || next[1] !== previous[1]
+      ++generation
+      for (const kind of ['guide', 'support'] as const) {
+        if (!identityChanged && conversations[kind].isReplying) {
+          conversations[kind].error = '登录状态已更新，请重新发送。'
+        }
+        cancel(kind)
+        if (identityChanged) conversations[kind] = createConversation(kind)
+      }
+      if (identityChanged) visible.value = false
+    },
+    { flush: 'sync' },
+  )
+  function open(kind: CustomerServiceEntry = 'guide', context?: SupportContext) {
+    const expected = generation
+    auth.getAuthorization()
+    entry.value = kind
+    if (context && expected === generation) conversations[kind].pendingContext = { ...context }
+    visible.value = true
+    conversations[kind].unreadCount = 0
+  }
+  function close() {
+    visible.value = false
+  }
+
+  async function receive(
+    kind: CustomerServiceEntry,
+    text: string,
+    authorization: string,
+    controller: AbortController,
+    expected: number,
+  ) {
+    const conversation = conversations[kind]
+    let answerId: number | undefined
+    const isCurrent = () => {
+      const latest = auth.getAuthorization()
+      return (
+        expected === generation &&
+        conversations[kind] === conversation &&
+        controllers.get(kind) === controller &&
+        !controller.signal.aborted &&
+        latest === authorization
+      )
+    }
+    try {
+      await streamCustomerServiceTurn(kind, text, {
+        signal: controller.signal,
+        expectedAuthorization: authorization,
+        onDelta: (chunk) => {
+          if (!isCurrent() || !chunk) return
+          if (answerId === undefined) {
+            answerId = ++nextId
+            conversation.messages.push({
+              id: answerId,
+              sender: 'service',
+              createdAt: Date.now(),
+              kind: 'text',
+              text: '',
+            })
+            if (!visible.value || entry.value !== kind) conversation.unreadCount++
+          }
+          const answer = conversation.messages.find((message) => message.id === answerId)
+          if (answer?.kind === 'text') answer.text += chunk
+        },
       })
-      if (!visible.value) unreadCount.value++
-    }, 650)
-    timers.add(timer)
+      if (isCurrent() && answerId === undefined) conversation.error = '未收到回答内容，请重新发送。'
+    } catch (error) {
+      const failure = error instanceof CustomerServiceError ? error : new CustomerServiceError()
+      // The shared HTTP interceptor may already have cleared a rejected login.
+      if (failure.kind === 'login-required' && !auth.getAuthorization()) {
+        loginPrompt.openLogin(failure.message)
+      }
+      if (!isCurrent()) return
+      if (failure.kind === 'login-required') {
+        auth.logout()
+        loginPrompt.openLogin(failure.message)
+        return
+      }
+      conversation.error = failure.message
+    } finally {
+      if (controllers.get(kind) === controller) {
+        controllers.delete(kind)
+        conversation.isReplying = false
+      }
+    }
   }
   function sendText(): boolean {
-    const expectedGeneration = generation
-    auth.getAuthorization()
-    // A send triggered by an old account must not submit its draft into the new one.
-    if (expectedGeneration !== generation) return false
-    const text = draft.value.trim()
+    const expected = generation
+    const authorization = auth.getAuthorization()
+    if (expected !== generation) return false
+    const conversation = current.value
+    if (conversation.isReplying) return false
+    const text = conversation.draft.trim()
     if (!text) return false
     if (text.length > CUSTOMER_SERVICE_TEXT_LIMIT) {
-      error.value = `最多输入 ${CUSTOMER_SERVICE_TEXT_LIMIT} 字`
+      conversation.error = `最多输入 ${CUSTOMER_SERVICE_TEXT_LIMIT} 字`
       return false
     }
-    error.value = ''
-    messages.value.push({
+    if (!authorization) {
+      loginPrompt.openLogin('登录后即可咨询智能导购和客服')
+      return false
+    }
+    conversation.error = ''
+    conversation.messages.push({
       id: ++nextId,
       sender: 'visitor',
       createdAt: Date.now(),
       kind: 'text',
       text,
     })
-    draft.value = ''
-    scheduleReply(customerServiceReply(text))
+    conversation.draft = ''
+    conversation.isReplying = true
+    const controller = new AbortController()
+    controllers.set(entry.value, controller)
+    void receive(entry.value, text, authorization, controller, expected)
     return true
   }
   function sendQuestion(id: string) {
-    const item = customerServiceQuestions.find((question) => question.id === id)
-    if (!item) return
+    const expected = generation
     auth.getAuthorization()
-    // Quick questions are independent of the user's unsent draft.
+    if (expected !== generation || current.value.isReplying) return
+    const question = customerServiceQuestions.find((item) => item.id === id)
+    if (!question) return
     const previous = draft.value
-    draft.value = item.question
+    draft.value = question.question
     sendText()
-    draft.value = previous
-  }
-  function sendContext(): boolean {
-    const expectedGeneration = generation
-    auth.getAuthorization()
-    if (expectedGeneration !== generation || !pendingContext.value) return false
-    const context = { ...pendingContext.value }
-    messages.value.push({
-      id: ++nextId,
-      sender: 'visitor',
-      createdAt: Date.now(),
-      kind: 'context',
-      context,
-    })
-    pendingContext.value = null
-    scheduleReply(
-      context.kind === 'order'
-        ? '演示答复：已在本次会话中关联这笔订单，请继续说明你要咨询的问题。当前不会查询或修改真实订单。'
-        : '演示答复：已在本次会话中关联这件商品，请继续说明你的用途或需要了解的参数。当前不会向真实客服发送消息。',
-    )
-    return true
+    if (expected === generation) draft.value = previous
   }
   function removeContext() {
-    pendingContext.value = null
+    current.value.pendingContext = null
   }
-  onScopeDispose(cancelReplies)
+  onScopeDispose(() => {
+    ++generation
+    cancel('guide')
+    cancel('support')
+  })
   return {
+    entry,
     visible,
     draft,
     error,
@@ -151,9 +238,9 @@ export const useCustomerServiceStore = defineStore('customerService', () => {
     open,
     close,
     clearConversation,
+    clearAllConversations,
     sendText,
     sendQuestion,
-    sendContext,
     removeContext,
   }
 })

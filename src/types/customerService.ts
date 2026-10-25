@@ -1,5 +1,7 @@
 import type { OrderStatus } from './order'
 
+export type CustomerServiceEntry = 'guide' | 'support'
+
 export interface ProductSupportContext {
   kind: 'product'
   id: string

@@ -230,7 +230,7 @@ const stateCopy = computed(() => {
                 text
                 :icon="Service"
                 @click="consultProduct(product)"
-                >咨询商品</ElButton
+                >联系客服</ElButton
               >
               <ElAlert
                 v-if="!isFlashSale && feedback"

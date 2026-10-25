@@ -2,26 +2,30 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { ElButton, ElDrawer, ElIcon } from 'element-plus'
-import { ChatDotRound, Close, Delete, Service } from '@element-plus/icons-vue'
+import { Close, Delete, Service } from '@element-plus/icons-vue'
 import { useCustomerServiceStore } from '@/stores/customerService'
 import { useCustomerServiceComposer } from '@/composables/useCustomerServiceComposer'
-import { CUSTOMER_SERVICE_TEXT_LIMIT, customerServiceQuestions } from '@/constants/customerService'
+import { CUSTOMER_SERVICE_TEXT_LIMIT } from '@/constants/customerService'
 import CustomerServiceContext from './CustomerServiceContext.vue'
 import '@/assets/customerService.css'
 
 const support = useCustomerServiceStore()
-const { visible, draft, error, messages, unreadCount, pendingContext, isReplying } =
+const { entry, visible, draft, error, messages, unreadCount, pendingContext, isReplying } =
   storeToRefs(support)
 const { handleKeydown } = useCustomerServiceComposer()
 const messageList = ref<HTMLElement>()
 const composer = ref<HTMLTextAreaElement>()
 const trigger = ref<HTMLButtonElement>()
 let previousFocus: HTMLElement | null = null
+const title = computed(() => (entry.value === 'guide' ? '智能导购' : '经纬智选客服'))
 const triggerLabel = computed(() =>
-  unreadCount.value ? `智能导购，${unreadCount.value} 条未读消息` : '智能导购',
+  unreadCount.value ? `导购与客服，${unreadCount.value} 条未读消息` : '智能导购',
 )
 const canSend = computed(
-  () => !!draft.value.trim() && draft.value.trim().length <= CUSTOMER_SERVICE_TEXT_LIMIT,
+  () =>
+    !isReplying.value &&
+    !!draft.value.trim() &&
+    draft.value.trim().length <= CUSTOMER_SERVICE_TEXT_LIMIT,
 )
 const timeFormatter = new Intl.DateTimeFormat('zh-CN', {
   timeZone: 'Asia/Shanghai',
@@ -47,6 +51,7 @@ watch(
 )
 async function restoreFocus() {
   await nextTick()
+  if (visible.value) return
   const target =
     previousFocus?.isConnected &&
     previousFocus !== document.body &&
@@ -57,13 +62,22 @@ async function restoreFocus() {
   previousFocus = null
 }
 watch(
-  () => [messages.value.length, isReplying.value, visible.value],
+  () => {
+    const last = messages.value.at(-1)
+    return [
+      entry.value,
+      messages.value.length,
+      last?.kind === 'text' ? last.text.length : 0,
+      isReplying.value,
+      visible.value,
+    ]
+  },
   () => {
     if (visible.value) void scrollToLatest()
   },
   { flush: 'post' },
 )
-onBeforeUnmount(() => support.clearConversation())
+onBeforeUnmount(() => support.clearAllConversations())
 </script>
 
 <template>
@@ -85,7 +99,7 @@ onBeforeUnmount(() => support.clearConversation())
   <ElDrawer
     v-model="visible"
     class="customer-service-drawer"
-    title="智能导购"
+    :title="title"
     size="420px"
     append-to-body
     destroy-on-close
@@ -100,36 +114,44 @@ onBeforeUnmount(() => support.clearConversation())
           <ElIcon><Service /></ElIcon>
         </div>
         <div class="support-heading">
-          <h2 :id="titleId">智能导购</h2>
-          <span>商品选购咨询 · 模拟接待</span>
+          <h2 :id="titleId">{{ title }}</h2>
         </div>
         <div class="support-header-actions">
           <ElButton
             text
             :icon="Delete"
-            aria-label="清空演示会话"
-            title="清空演示会话"
+            aria-label="清空当前聊天记录"
+            title="清空当前聊天记录"
             :disabled="messages.length <= 1 && !draft && !pendingContext"
             @click="support.clearConversation()"
           />
           <ElButton
             text
             :icon="Close"
-            aria-label="关闭智能导购"
-            title="关闭智能导购"
+            :aria-label="`关闭${title}`"
+            :title="`关闭${title}`"
             @click="support.close()"
           />
         </div>
       </div>
     </template>
-    <p class="support-demo-notice"><span>前端演示</span>模拟回复，消息不会发送给真实客服。</p>
+    <nav class="support-entry-tabs" aria-label="咨询入口">
+      <button type="button" :aria-pressed="entry === 'guide'" @click="support.open('guide')">
+        智能导购
+      </button>
+      <button type="button" :aria-pressed="entry === 'support'" @click="support.open('support')">
+        客服
+      </button>
+    </nav>
+    <p class="support-notice">AI 回复供参考，商品信息与售后安排请以商家确认为准。</p>
     <ol
       ref="messageList"
       class="support-messages"
       role="log"
       aria-live="polite"
-      aria-relevant="additions"
-      aria-label="智能导购聊天记录"
+      aria-relevant="additions text"
+      :aria-label="`${title}聊天记录`"
+      :aria-busy="isReplying"
     >
       <li
         v-for="message in messages"
@@ -138,46 +160,28 @@ onBeforeUnmount(() => support.clearConversation())
         :class="`support-message--${message.sender}`"
       >
         <div class="support-message-meta">
-          <span>{{ message.sender === 'service' ? '智能导购 · 模拟' : '你' }}</span
-          ><time :datetime="new Date(message.createdAt).toISOString()">{{
+          <span v-if="message.sender === 'service'">{{ title }}</span>
+          <time :datetime="new Date(message.createdAt).toISOString()">{{
             timeFormatter.format(message.createdAt)
           }}</time>
         </div>
         <p v-if="message.kind === 'text'" class="support-bubble">{{ message.text }}</p>
         <CustomerServiceContext v-else :context="message.context" />
-        <span v-if="message.sender === 'visitor'" class="support-local-state">仅本地发送</span>
       </li>
     </ol>
     <p v-if="isReplying" class="support-typing" role="status">
-      <span aria-hidden="true">•••</span> 智能导购正在模拟回复
+      <span aria-hidden="true">•••</span> {{ title }}正在回复
     </p>
-    <section class="support-shortcuts" aria-label="常见问题">
-      <p>
-        <ElIcon aria-hidden="true"><ChatDotRound /></ElIcon> 常见问题
-      </p>
-      <div>
-        <button
-          v-for="question in customerServiceQuestions"
-          :key="question.id"
-          type="button"
-          @click="support.sendQuestion(question.id)"
-        >
-          {{ question.label }}
-        </button>
-      </div>
-    </section>
     <template #footer>
       <div v-if="pendingContext" class="support-context-preview">
         <div class="support-preview-heading">
-          <span>待发送的咨询信息</span
+          <span>当前页面信息 · 仅供你查看</span
           ><button type="button" aria-label="移除关联信息" @click="support.removeContext()">
             <ElIcon aria-hidden="true"><Close /></ElIcon>
           </button>
         </div>
         <CustomerServiceContext :context="pendingContext" />
-        <ElButton size="small" plain @click="support.sendContext()">{{
-          pendingContext.kind === 'product' ? '发送商品' : '发送订单'
-        }}</ElButton>
+        <p class="support-context-hint">信息不会自动发送，请在问题中说明商品或订单。</p>
       </div>
       <form class="support-composer" @submit.prevent="support.sendText()">
         <label class="sr-only" for="support-message-input">咨询内容</label>
@@ -199,7 +203,9 @@ onBeforeUnmount(() => support.clearConversation())
               >{{ draft.length }}/{{ CUSTOMER_SERVICE_TEXT_LIMIT }}</span
             >
           </p>
-          <ElButton type="primary" native-type="submit" :disabled="!canSend">发送</ElButton>
+          <ElButton type="primary" native-type="submit" :disabled="!canSend">{{
+            isReplying ? '回复中' : '发送'
+          }}</ElButton>
         </div>
       </form>
     </template>
