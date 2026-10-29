@@ -5,17 +5,32 @@ import { ElButton, ElDrawer, ElIcon } from 'element-plus'
 import { Close, Delete, Service } from '@element-plus/icons-vue'
 import { useCustomerServiceStore } from '@/stores/customerService'
 import { useCustomerServiceComposer } from '@/composables/useCustomerServiceComposer'
+import { useCustomerServiceOrders } from '@/composables/useCustomerServiceOrders'
 import { CUSTOMER_SERVICE_TEXT_LIMIT } from '@/constants/customerService'
 import CustomerServiceContext from './CustomerServiceContext.vue'
+import CustomerServiceOrders from './CustomerServiceOrders.vue'
 import '@/assets/customerService.css'
 
 const support = useCustomerServiceStore()
 const { entry, visible, draft, error, messages, unreadCount, pendingContext, isReplying } =
   storeToRefs(support)
 const { handleKeydown } = useCustomerServiceComposer()
+const {
+  orders,
+  state: ordersState,
+  selectedOrderNo,
+  showPicker: showOrderPicker,
+  dismiss: dismissOrders,
+  load: loadOrders,
+  consultOrder,
+} = useCustomerServiceOrders()
 const messageList = ref<HTMLElement>()
 const composer = ref<HTMLTextAreaElement>()
 const trigger = ref<HTMLButtonElement>()
+function closeOrderPicker() {
+  dismissOrders()
+  composer.value?.focus()
+}
 let previousFocus: HTMLElement | null = null
 const title = computed(() => (entry.value === 'guide' ? '智能导购' : '经纬智选客服'))
 const triggerLabel = computed(() =>
@@ -68,6 +83,10 @@ watch(
       entry.value,
       messages.value.length,
       last?.kind === 'text' ? last.text.length : 0,
+      last?.kind === 'text' ? last.replyStatus : '',
+      last?.kind === 'text'
+        ? last.actions?.map((action) => action.submission.status).join(',')
+        : '',
       isReplying.value,
       visible.value,
     ]
@@ -165,24 +184,101 @@ onBeforeUnmount(() => support.clearAllConversations())
             timeFormatter.format(message.createdAt)
           }}</time>
         </div>
-        <p v-if="message.kind === 'text'" class="support-bubble">{{ message.text }}</p>
+        <template v-if="message.kind === 'text'">
+          <p v-if="message.text" class="support-bubble">{{ message.text }}</p>
+          <div
+            v-if="entry === 'support' && message.sender === 'service' && message.actions?.length"
+            class="support-actions"
+          >
+            <div
+              v-for="(action, actionIndex) in message.actions"
+              :key="action.actionId"
+              class="support-action"
+            >
+              <ElButton
+                type="primary"
+                plain
+                size="small"
+                native-type="button"
+                :aria-describedby="`support-action-hint-${message.id}-${actionIndex}`"
+                :loading="action.submission.status === 'submitting'"
+                :disabled="
+                  message.replyStatus !== 'done' ||
+                  action.submission.status === 'submitting' ||
+                  action.submission.status === 'submitted' ||
+                  action.submission.status === 'expired'
+                "
+                @click="support.submitTransferHuman(action.actionId)"
+              >
+                {{
+                  action.submission.status === 'submitted'
+                    ? '已提交'
+                    : action.submission.status === 'submitting'
+                      ? '提交中'
+                      : action.submission.status === 'expired'
+                        ? '已过期'
+                        : action.submission.status === 'failed'
+                          ? '重试提交'
+                          : '转人工'
+                }}
+              </ElButton>
+              <div :id="`support-action-hint-${message.id}-${actionIndex}`" aria-live="polite">
+                <template v-if="action.submission.status === 'submitted'">
+                  <p>工单号：{{ action.submission.ticketNo }}</p>
+                  <p>{{ action.submission.message }}</p>
+                </template>
+                <p
+                  v-else-if="
+                    action.submission.status === 'failed' || action.submission.status === 'expired'
+                  "
+                  class="support-action-error"
+                  role="alert"
+                >
+                  {{ action.submission.error }}
+                </p>
+                <p v-else-if="message.replyStatus === 'streaming'">本条回复完成后可提交。</p>
+                <p v-else-if="message.replyStatus === 'interrupted'">
+                  本条回复未完成，请重新提出人工服务请求。
+                </p>
+              </div>
+            </div>
+          </div>
+        </template>
         <CustomerServiceContext v-else :context="message.context" />
       </li>
     </ol>
-    <p v-if="isReplying" class="support-typing" role="status">
-      <span aria-hidden="true">•••</span> {{ title }}正在回复
-    </p>
+    <p v-if="isReplying" class="support-typing" role="status">AI 回复生成中</p>
     <template #footer>
-      <div v-if="pendingContext" class="support-context-preview">
+      <div
+        v-if="pendingContext"
+        class="support-context-preview"
+        :class="{ 'support-context-preview--product': pendingContext.kind === 'product' }"
+      >
         <div class="support-preview-heading">
-          <span>当前页面信息 · 仅供你查看</span
+          <span>{{
+            pendingContext.kind === 'product'
+              ? '当前咨询商品 · 仅供查看'
+              : '当前页面信息 · 仅供你查看'
+          }}</span
           ><button type="button" aria-label="移除关联信息" @click="support.removeContext()">
             <ElIcon aria-hidden="true"><Close /></ElIcon>
           </button>
         </div>
         <CustomerServiceContext :context="pendingContext" />
-        <p class="support-context-hint">信息不会自动发送，请在问题中说明商品或订单。</p>
+        <p v-if="pendingContext.kind !== 'product'" class="support-context-hint">
+          信息不会自动发送，请在问题中说明商品或订单。
+        </p>
       </div>
+      <CustomerServiceOrders
+        v-if="showOrderPicker"
+        :orders="orders"
+        :state="ordersState"
+        :selected-order-no="selectedOrderNo"
+        :disabled="isReplying"
+        @select="consultOrder"
+        @retry="loadOrders"
+        @dismiss="closeOrderPicker"
+      />
       <form class="support-composer" @submit.prevent="support.sendText()">
         <label class="sr-only" for="support-message-input">咨询内容</label>
         <textarea

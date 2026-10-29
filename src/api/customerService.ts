@@ -1,6 +1,81 @@
 import axios from 'axios'
 import { http } from './http'
-import type { CustomerServiceEntry } from '@/types/customerService'
+import type { CustomerServiceEntry, TransferHumanActionPayload } from '@/types/customerService'
+
+type TicketErrorKind =
+  'login-required' | 'forbidden' | 'expired' | 'timeout' | 'protocol' | 'unavailable'
+
+export class TransferHumanSubmissionError extends Error {
+  constructor(public readonly kind: TicketErrorKind = 'unavailable') {
+    super(
+      {
+        'login-required': '登录已失效，请重新登录后提交。',
+        forbidden: '当前账号无权提交人工服务申请。',
+        expired: '入口已过期或不可用，请重新提出人工服务请求。',
+        timeout: '请求超时，暂未确认提交结果，请使用此按钮重试。',
+        protocol: '未收到有效提交结果，请稍后使用此按钮重试。',
+        unavailable: '暂未确认提交结果，请稍后使用此按钮重试。',
+      }[kind],
+    )
+  }
+}
+
+function ticketError(code: unknown): TransferHumanSubmissionError {
+  return new TransferHumanSubmissionError(
+    code === 401
+      ? 'login-required'
+      : code === 403
+        ? 'forbidden'
+        : code === 410
+          ? 'expired'
+          : 'unavailable',
+  )
+}
+
+export async function submitTransferHumanTicket(
+  actionId: string,
+  options: {
+    signal: AbortSignal
+    expectedAuthorization: string
+  },
+): Promise<{ ticketNo: string; message: string }> {
+  try {
+    const response = await http.post<{
+      code?: unknown
+      data?: { ticketNo?: unknown; message?: unknown }
+    } | null>(
+      '/api/support/tickets',
+      { actionId },
+      {
+        ...options,
+        timeout: 130_000,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )
+    if (response.data?.code !== 200) throw ticketError(response.data?.code)
+    const data = response.data.data
+    if (
+      typeof data?.ticketNo !== 'string' ||
+      !data.ticketNo.trim() ||
+      typeof data.message !== 'string' ||
+      !data.message.trim()
+    ) {
+      throw new TransferHumanSubmissionError('protocol')
+    }
+    // Preserve both the string identifier and the backend's Demo explanation.
+    return { ticketNo: data.ticketNo, message: data.message }
+  } catch (error) {
+    if (error instanceof TransferHumanSubmissionError) throw error
+    if (axios.isCancel(error)) throw error
+    if (axios.isAxiosError(error)) {
+      if (error.response) throw ticketError(error.response.status)
+      if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+        throw new TransferHumanSubmissionError('timeout')
+      }
+    }
+    throw new TransferHumanSubmissionError('unavailable')
+  }
+}
 
 export class CustomerServiceError extends Error {
   constructor(
@@ -29,6 +104,7 @@ interface StreamOptions {
   signal?: AbortSignal
   expectedAuthorization: string
   onDelta: (text: string) => void
+  onAction?: (action: TransferHumanActionPayload) => void
 }
 const endpoints: Record<CustomerServiceEntry, string> = {
   guide: '/api/guide/turns/stream',
@@ -108,7 +184,10 @@ export async function streamCustomerServiceTurn(
     let eventSize = 0
     const dispatch = () => {
       if (!data.length) return false
-      let event: { type?: unknown; payload?: { text?: unknown } } | null
+      let event: {
+        type?: unknown
+        payload?: { text?: unknown; kind?: unknown; label?: unknown; actionId?: unknown }
+      } | null
       try {
         event = JSON.parse(data.join('\n'))
       } catch {
@@ -118,6 +197,24 @@ export async function streamCustomerServiceTurn(
       eventSize = 0
       if (event?.type === 'done') return true
       if (event?.type === 'error') throw new CustomerServiceError('interrupted')
+      if (event?.type === 'action') {
+        const payload = event.payload
+        if (
+          payload?.kind !== 'transfer_human' ||
+          typeof payload.label !== 'string' ||
+          !payload.label.trim() ||
+          typeof payload.actionId !== 'string' ||
+          !payload.actionId.trim()
+        ) {
+          throw new CustomerServiceError('protocol')
+        }
+        options.onAction?.({
+          kind: 'transfer_human',
+          label: payload.label,
+          actionId: payload.actionId,
+        })
+        return false
+      }
       if (event?.type !== 'delta' || typeof event.payload?.text !== 'string') {
         throw new CustomerServiceError('protocol')
       }
